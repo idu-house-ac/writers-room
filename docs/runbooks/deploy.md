@@ -23,15 +23,40 @@ The app must run as a long-lived process because of the WebSocket connections, s
 - **Railway, Render, Fly.io** (and similar) run a Dockerfile, keep WebSockets open and offer managed Postgres. Easiest route with no server to maintain. Costs are usage based; check each provider's current pricing and free-tier limits, which change often.
 - **A VPS** (Hetzner, DigitalOcean, Linode, ...) with Docker: the included `docker-compose.prod.yml` runs everything, including HTTPS via Caddy and nightly backups. Cheapest and fully self-hosted, which is what the brief assumed; you own backups and updates.
 
-## Option A: a container host (Railway, Render, Fly.io)
+## Option A (recommended): Railway, step by step
 
-The exact clicks differ per provider and change over time, so treat this as the shape of the setup and follow the provider's own docs for the details.
+Checked against Railway's docs on 2026-11-18; the dashboard changes over time, so if a button has moved, the setting's name is still the thing to look for. Railway's "config as code" files are deprecated, so everything below is done in the dashboard.
 
-1. Create a Postgres database on the provider and note its connection URL.
-2. Create a service from this GitHub repository. Point it at `deploy/Dockerfile` (the Docker build context is the repository root). Expose port 3000 and set the health check path to `/api/health`.
-3. Set the environment variables from the table above. `APP_ORIGIN` is the public URL the provider gives you (or your custom domain, once attached).
-4. Deploy. Sign in with the bootstrap owner, create a project, open Share, invite the rest of the team.
-5. Backups: use the provider's database backup feature, or run `deploy/backup/backup.sh` from a scheduled job that has `pg_dump` and the `PG*` variables (see `docs/runbooks/backups.md`). Make sure the dump is copied off the provider.
+1. Go to railway.com and sign up with your GitHub account (the one that can see the `idu-house-ac/writers-room` repository). Railway will ask for a payment method or a plan before it deploys; check their current pricing.
+2. **New Project → Deploy from GitHub repo** → pick `idu-house-ac/writers-room`. If the repository is not listed, use the link to configure the Railway GitHub app and grant it access to the `idu-house-ac` organisation.
+3. The first build will fail or build the wrong thing because the Dockerfile is not at the repository root. That is expected. Open the new service → **Variables** → **New Variable** and add:
+   - `RAILWAY_DOCKERFILE_PATH` = `deploy/Dockerfile`
+4. Add the database: back on the project canvas click **+ New → Database → PostgreSQL**. A service named `Postgres` appears.
+5. Open the app service again → **Variables**, and add these (use the **RAW Editor** to paste them all at once):
+   ```
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   SESSION_SECRET=<paste a long random string, 32+ characters>
+   APP_ORIGIN=https://<filled in at step 7>
+   BOOTSTRAP_OWNER_EMAIL=you@example.com
+   BOOTSTRAP_OWNER_NAME=Your Name
+   BOOTSTRAP_OWNER_PASSWORD=<a strong password>
+   NODE_ENV=production
+   ```
+   `${{Postgres.DATABASE_URL}}` is a reference to the database service's own variable; type it exactly like that. To make a random secret on a Mac: `openssl rand -hex 32` in Terminal.
+6. **Settings → Deploy → Healthcheck Path**: `/api/health`.
+7. **Settings → Networking → Public Networking → Generate Domain**. When asked for a port, enter `3000`. Copy the domain Railway gives you (something like `writers-room-production.up.railway.app`) and set `APP_ORIGIN` in Variables to `https://` + that domain, with no trailing slash. Deploy the staged variable changes.
+8. Wait for the deployment to show as healthy, then open the domain. Sign in with the bootstrap owner, create a project, open **Share**, invite the rest of the team. Without email configured, copy the invitation link the Share dialog shows after sending and send it by message.
+9. Backups: open the Postgres service → **Backups** and turn on scheduled backups. Also plan to download a dump off Railway now and then (`docs/runbooks/backups.md`).
+
+Later, optional:
+- **Custom domain** (for example `writers.iduhouse.com`): **Settings → Networking → Custom Domain**, add the CNAME and TXT records it shows at your DNS provider, then change `APP_ORIGIN` to the new address.
+- **Real email**: set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` and `MAIL_FROM` from any SMTP provider's settings page.
+
+Every push to `main` on GitHub redeploys automatically. If a deploy fails, the **Deployments** tab shows the build and runtime logs; the lines from `pnpm --filter @writers-room/server start` are the app's own log.
+
+## Other container hosts (Render, Fly.io)
+
+Same shape: create a Postgres database, create a service from the repository with `deploy/Dockerfile` as the Dockerfile (build context is the repository root), expose port 3000, set the health check path to `/api/health`, set the variables from the table above, deploy. Follow the provider's docs for the exact clicks.
 
 ## Option B: your own server with Docker Compose
 

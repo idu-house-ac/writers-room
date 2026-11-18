@@ -22,13 +22,15 @@ docker compose up --build
 |---|---|
 | Web app | http://localhost:5173 |
 | API | http://localhost:3000/api/health |
-| Collaboration server (WebSocket) | port 3001, reached by the app at `/collab` |
+| Collaboration WebSocket | same port as the API, at `/collab` |
 | Mailpit (every email the app sends) | http://localhost:8025 |
 | Nightly database dumps | `./backups/` |
 
 Sign in with the bootstrap Owner. Create a project, open it, click **Share**, invite a second email address with a role. Open Mailpit, click the invitation link, create the second account, and it will see only the projects it belongs to. **Forgot your password?** on the sign-in page sends a reset link to Mailpit as well.
 
-Backups and restore drills: [docs/runbooks/backups.md](docs/runbooks/backups.md).
+Backups and restore drills: [docs/runbooks/backups.md](docs/runbooks/backups.md). Putting it on a server for the team: [docs/runbooks/deploy.md](docs/runbooks/deploy.md).
+
+To test co-writing on your own, sign in as two accounts in two browser profiles (for example a normal window and a private window) and open the same project in both. Without email set up, the Share dialog shows the invitation link to copy after you send an invite.
 
 ## Develop without Docker
 

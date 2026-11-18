@@ -1,7 +1,8 @@
-// The collaboration server: Hocuspocus over WebSocket. Before it syncs anything it asks the same
-// database the API uses whether the connecting session may read or edit the project; Commenters
-// and Readers get a read-only connection. Documents load from and store to project_docs.
-import { Server, type Hocuspocus, type Extension } from '@hocuspocus/server';
+// The collaboration server: Hocuspocus over WebSocket, mounted on the API's own port at /collab
+// (see app.ts) so the whole app is one process on one port. Before it syncs anything it asks the
+// same database the API uses whether the connecting session may read or edit the project;
+// Commenters and Readers get a read-only connection. Documents load from and store to project_docs.
+import { Hocuspocus, type Extension } from '@hocuspocus/server';
 import { Signer } from '@fastify/cookie';
 import * as Y from 'yjs';
 import { can, type FormatProfileId, type Role, type UserSummary } from '@writers-room/shared';
@@ -32,7 +33,7 @@ export interface CollabOptions {
   quiet?: boolean;
 }
 
-export function createCollabServer(deps: { config: Config; db: Db }, opts: CollabOptions = {}): Server<CollabContext> {
+export function createCollabServer(deps: { config: Config; db: Db }, opts: CollabOptions = {}): Hocuspocus<CollabContext> {
   const signer = new Signer(deps.config.SESSION_SECRET);
   const profiles = new Map<string, FormatProfileId>();
 
@@ -49,7 +50,7 @@ export function createCollabServer(deps: { config: Config; db: Db }, opts: Colla
     },
   };
 
-  return new Server<CollabContext>({
+  return new Hocuspocus<CollabContext>({
     quiet: opts.quiet ?? deps.config.NODE_ENV === 'test',
     debounce: opts.debounce ?? 2000,
     maxDebounce: opts.maxDebounce ?? 10000,

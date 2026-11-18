@@ -13,6 +13,7 @@ export function ShareDialog({ project, onClose, onChange }: { project: ProjectDe
   const [role, setRole] = useState<Role>('writer');
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [lastLink, setLastLink] = useState<{ email: string; link: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function run(key: string, fn: () => Promise<void>, okMessage?: string) {
@@ -37,8 +38,9 @@ export function ShareDialog({ project, onClose, onChange }: { project: ProjectDe
     run(
       'invite',
       async () => {
-        const r = await api<{ invites: InviteSummary[] }>(`/projects/${project.id}/invites`, { method: 'POST', body: { email, role } });
+        const r = await api<{ invites: InviteSummary[]; link: string }>(`/projects/${project.id}/invites`, { method: 'POST', body: { email, role } });
         applyInvites(r.invites);
+        setLastLink({ email: email.trim().toLowerCase(), link: r.link });
         setEmail('');
       },
       `Invitation sent to ${email.trim().toLowerCase()}.`,
@@ -81,7 +83,23 @@ export function ShareDialog({ project, onClose, onChange }: { project: ProjectDe
         )}
 
         {error && <p className="error" role="alert">{error}</p>}
-        {status && <p className="notice notice-ok" role="status">{status}</p>}
+        {status && (
+          <div className="notice notice-ok" role="status">
+            {status}
+            {lastLink && (
+              <div className="row" style={{ marginTop: 8, gap: 8 }}>
+                <input className="input" readOnly value={lastLink.link} aria-label={`Invitation link for ${lastLink.email}`} onFocus={(e) => e.target.select()} />
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => navigator.clipboard?.writeText(lastLink.link).then(() => setStatus(`Link for ${lastLink.email} copied. Send it any way you like; it works once.`))}
+                >
+                  Copy link
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <section>
           <h3 style={{ marginBottom: 6 }}>Members</h3>
@@ -168,8 +186,9 @@ export function ShareDialog({ project, onClose, onChange }: { project: ProjectDe
                       run(
                         `resend-${inv.id}`,
                         async () => {
-                          const r = await api<{ invites: InviteSummary[] }>(`/projects/${project.id}/invites/${inv.id}/resend`, { method: 'POST' });
+                          const r = await api<{ invites: InviteSummary[]; link: string }>(`/projects/${project.id}/invites/${inv.id}/resend`, { method: 'POST' });
                           applyInvites(r.invites);
+                          setLastLink({ email: inv.email, link: r.link });
                         },
                         `Invitation resent to ${inv.email}.`,
                       )

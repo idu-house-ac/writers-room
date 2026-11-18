@@ -8,8 +8,6 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().default(3000),
-  /** The collaboration (WebSocket) server listens here; the web app reaches it at /collab. */
-  COLLAB_PORT: z.coerce.number().int().default(3001),
   DATABASE_URL: z.string().min(1),
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 characters'),
   APP_ORIGIN: z.url().default('http://localhost:5173'),

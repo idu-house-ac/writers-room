@@ -12,7 +12,8 @@ import { setupAuth } from './plugins/auth';
 import { authRoutes } from './routes/auth';
 import { projectRoutes } from './routes/projects';
 import { presenceOf, type CollabContext } from './collab';
-import type { Server as CollabServer } from '@hocuspocus/server';
+import websocket from '@fastify/websocket';
+import type { Hocuspocus } from '@hocuspocus/server';
 import { requireUser } from './plugins/auth';
 
 export interface AppContext {
@@ -21,8 +22,8 @@ export interface AppContext {
   mailer: Mailer;
   /** Rate limiting is on everywhere except in automated tests. */
   rateLimit: boolean;
-  /** The collaboration server, when running in this process (presence lookups). */
-  collab?: CollabServer<CollabContext>;
+  /** The collaboration server; mounted at /collab and used for presence lookups. */
+  collab?: Hocuspocus<CollabContext>;
 }
 
 export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
@@ -45,6 +46,31 @@ export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {})
   setupAuth(app, { config: ctx.config, db: ctx.db });
 
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
+
+  // Live co-writing: WebSocket connections at /collab are handed to Hocuspocus, which authenticates
+  // them from the session cookie (see collab.ts).
+  if (ctx.collab) {
+    const collab = ctx.collab;
+    await app.register(websocket);
+    app.get('/collab', { websocket: true }, (socket, request) => {
+      // Hocuspocus 4 reads a Fetch-style Request; rebuild one from the upgrade request (cookie included).
+      const raw = request.raw;
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(raw.headers)) {
+        if (/^(connection|upgrade|sec-websocket-.*)$/i.test(name) || value === undefined) continue;
+        for (const v of Array.isArray(value) ? value : [value]) headers.append(name, v);
+      }
+      const connection = collab.handleConnection(socket, new Request(`http://${raw.headers.host ?? 'localhost'}${raw.url ?? '/collab'}`, { headers }));
+      socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+        const bytes = Array.isArray(data) ? Buffer.concat(data) : data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+        connection.handleMessage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      });
+      socket.on('close', (code: number, reason: Buffer) =>
+        connection.handleClose({ code, reason: reason.toString() } as Parameters<typeof connection.handleClose>[0]),
+      );
+      socket.on('pong', () => connection.touch());
+    });
+  }
 
   app.setErrorHandler((err: unknown, _request, reply) => {
     if (err instanceof HttpError) return sendError(reply, err);
@@ -69,7 +95,7 @@ export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {})
         const user = requireUser(request);
         if (!ctx.collab) return { presence: {} };
         const { rows } = await ctx.db.query<{ project_id: string }>('select project_id from project_members where user_id = $1', [user.id]);
-        return { presence: presenceOf(ctx.collab.hocuspocus, rows.map((r) => r.project_id)) };
+        return { presence: presenceOf(ctx.collab, rows.map((r) => r.project_id)) };
       });
     },
     { prefix: '/api' },

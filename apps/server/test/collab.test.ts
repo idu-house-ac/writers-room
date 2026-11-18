@@ -3,12 +3,10 @@ import * as Y from 'yjs';
 import WebSocket from 'ws';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { createProject, createTestApp, makeUser, type TestContext } from './helpers';
-import { createCollabServer } from '../src/collab';
-import { loadConfig } from '../src/config';
+import { presenceOf } from '../src/collab';
 import { SCRIPT_FIELD } from '../src/docs';
 
 let ctx: TestContext;
-let collab: ReturnType<typeof createCollabServer>;
 let port: number;
 let owner: Awaited<ReturnType<typeof makeUser>>;
 let reader: Awaited<ReturnType<typeof makeUser>>;
@@ -22,15 +20,11 @@ beforeAll(async () => {
   stranger = await makeUser(ctx, 'stranger@example.com', 'Stranger');
   projectId = (await createProject(ctx, owner.cookie, 'Collab')).id;
   await ctx.db.query(`insert into project_members (project_id, user_id, role) values ($1, $2, 'reader')`, [projectId, reader.id]);
-  const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: 'postgres://unused', SESSION_SECRET: 'test-secret-test-secret-test-secret', COLLAB_PORT: '0' });
-  collab = createCollabServer({ config, db: ctx.db }, { debounce: 50, maxDebounce: 100, quiet: true });
-  port = 3900 + Math.floor(Math.random() * 100); // listen(0) would fall back to the default port
-  await collab.listen(port);
+  // The WebSocket lives on the API's own port at /collab, so listen for real.
+  await ctx.app.listen({ port: 0, host: '127.0.0.1' });
+  port = (ctx.app.server.address() as { port: number }).port;
 });
-afterAll(async () => {
-  await collab.destroy();
-  await ctx.close();
-});
+afterAll(() => ctx.close());
 
 /** A provider that connects like a browser would: the session cookie rides on the upgrade request. */
 function connect(cookie: string | null) {
@@ -41,7 +35,7 @@ function connect(cookie: string | null) {
   }
   const document = new Y.Doc();
   const events: string[] = [];
-  const websocketProvider = new HocuspocusProviderWebsocket({ url: `ws://127.0.0.1:${port}`, WebSocketPolyfill: CookieSocket });
+  const websocketProvider = new HocuspocusProviderWebsocket({ url: `ws://127.0.0.1:${port}/collab`, WebSocketPolyfill: CookieSocket });
   websocketProvider.on('status', (e: { status: string }) => events.push(`status:${e.status}`));
   websocketProvider.on('close', (e: { event?: { code?: number; reason?: string } }) => events.push(`close:${e?.event?.code}:${e?.event?.reason}`));
   const provider = new HocuspocusProvider({
@@ -101,7 +95,7 @@ describe('collaboration server', () => {
     b.insertBlock('From the second window.');
     await until(() => a.text().includes('From the second window.'));
     expect(a.text()).toBe(b.text());
-    await until(() => collab.hocuspocus.getConnectionsCount() === 2);
+    await until(() => ctx.collab.getConnectionsCount() === 2);
 
     // stored after the debounce
     await until(() => false, 300).catch(() => undefined);
@@ -157,9 +151,10 @@ describe('collaboration server', () => {
     await a.synced;
     a.provider.setAwarenessField('user', { id: owner.id, name: 'Owner', colour: owner.colour });
     await until(() => false, 150).catch(() => undefined);
-    const { presenceOf } = await import('../src/collab');
-    const p = presenceOf(collab.hocuspocus, [projectId]);
+    const p = presenceOf(ctx.collab, [projectId]);
     expect(p[projectId]?.map((u) => u.name)).toEqual(['Owner']);
+    const res = await ctx.app.inject({ method: 'GET', url: '/api/presence', headers: { cookie: owner.cookie } });
+    expect(res.json().presence[projectId].map((u: { name: string }) => u.name)).toEqual(['Owner']);
     a.destroy();
   });
 });

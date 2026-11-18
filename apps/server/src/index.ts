@@ -28,12 +28,11 @@ const app = await buildApp({ config, db, mailer: createMailer(config, (m) => app
 await bootstrapOwner(db, config, (m) => app.log.info(m));
 
 await app.listen({ port: config.PORT, host: config.HOST });
-await collab.listen(config.COLLAB_PORT);
-app.log.info(`Collaboration server listening on port ${config.COLLAB_PORT}`);
+app.log.info('Collaboration WebSocket mounted at /collab');
 app.log.info(`Mail transport: ${config.mailTransport}${config.SMTP_HOST ? ` (${config.SMTP_HOST}:${config.SMTP_PORT})` : ''}`);
 
 const shutdown = async () => {
-  await collab.destroy();
+  collab.closeConnections();
   await app.close();
   await db.end();
   process.exit(0);

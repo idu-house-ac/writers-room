@@ -2,6 +2,18 @@
 
 Kept short, newest first. Each entry says what was chosen, why, and what was checked.
 
+## Deployment prep (Nov 2026, after M2)
+
+**One process, one port.** The collaboration WebSocket now mounts on the API's own port at `/collab` through `@fastify/websocket` (MIT), instead of a second port. Hocuspocus 4's `handleConnection` expects a Fetch-style `Request` and does not attach socket listeners itself (its bundled `Server` uses `crossws` for that), so `app.ts` rebuilds a `Request` from the upgrade headers (cookie included, hop-by-hop headers dropped) and forwards `message`, `close` and `pong` events to the connection. This matters for hosts that expose a single port (Railway, Render, Fly.io) and simplifies Caddy.
+
+**Production image.** `deploy/Dockerfile` builds the web app and runs the server with `WEB_DIST` set, so the server serves the static files with an index.html fallback for client routes. The server still runs through `tsx` (no compile step); dev dependencies are therefore installed in the image. Acceptable for a small team; a compiled build can come later if image size matters. `docker-compose.prod.yml` adds Caddy for automatic HTTPS and the backup service. Verified locally by running the image's command (not the image itself, since Docker is not available in the build environment) with a built web bundle: the full two-browser collaboration test passes against the single port.
+
+**Hosting choice.** Vercel cannot run the server (no long-lived processes or WebSockets), so the runbook recommends a container host or a VPS. See `docs/runbooks/deploy.md`.
+
+**Invitation links without email.** Invite creation and resend now return the link to the Owner, and the Share dialog shows it with a Copy button. Tokens are still only stored hashed; the link is shown once, at creation.
+
+**Autocomplete and Tab.** Suggestions appear after the first typed character (never on an empty cue), Tab fills the name and moves on to a parenthetical, Enter fills it and moves to dialogue, and Tab on an empty line always cycles elements.
+
 ## M2 (Nov 2026)
 
 **Collaboration server.** Hocuspocus 4.8 (`@hocuspocus/server`, MIT) runs inside the API process on its own port (`COLLAB_PORT`, default 3001); the web app reaches it at `/collab` (Vite proxies it in development; Caddy will in M7). Verified against the installed types: the entry point is the `Server` class (`listen`, `destroy`, `.hocuspocus` for documents and connection counts). `listen(0)` does not pick a random port, it falls back to the default, so tests choose a port explicitly.

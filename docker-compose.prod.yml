@@ -1,0 +1,84 @@
+# Production on one server: Caddy (HTTPS) → app (web + API + collaboration) → Postgres, plus nightly backups.
+#   cp .env.example .env     then set DOMAIN, SESSION_SECRET, POSTGRES_PASSWORD, APP_ORIGIN=https://<DOMAIN>,
+#                            BOOTSTRAP_OWNER_*, and SMTP_* for real email
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Caddy obtains and renews the certificate itself; DNS for DOMAIN must point at this server first.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: writers_room
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: writers_room
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U writers_room -d writers_room']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://writers_room:${POSTGRES_PASSWORD}@db:5432/writers_room
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN in .env, e.g. https://writers.example.com}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-Writers Room <writers-room@localhost>}
+      BOOTSTRAP_OWNER_EMAIL: ${BOOTSTRAP_OWNER_EMAIL:-}
+      BOOTSTRAP_OWNER_NAME: ${BOOTSTRAP_OWNER_NAME:-Owner}
+      BOOTSTRAP_OWNER_PASSWORD: ${BOOTSTRAP_OWNER_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  backup:
+    image: postgres:16-alpine
+    command: sh /scripts/backup.sh
+    environment:
+      PGHOST: db
+      PGUSER: writers_room
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: writers_room
+      BACKUP_DIR: /backups
+      BACKUP_TIME: ${BACKUP_TIME:-03:00}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+    volumes:
+      - ./deploy/backup:/scripts:ro
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

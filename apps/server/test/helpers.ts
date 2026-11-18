@@ -4,11 +4,13 @@ import { loadConfig } from '../src/config';
 import { createDb, resetDatabase, type Db } from '../src/db';
 import { MemoryMailer } from '../src/mail';
 import { createUser } from '../src/users';
+import { createCollabServer } from '../src/collab';
 
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5433/writers_room_test';
 
 export interface TestContext {
   app: FastifyInstance;
+  collab: ReturnType<typeof createCollabServer>;
   db: Db;
   mailer: MemoryMailer;
   appOrigin: string;
@@ -26,14 +28,17 @@ export async function createTestApp(): Promise<TestContext> {
   const db = createDb(config.DATABASE_URL);
   await resetDatabase(db);
   const mailer = new MemoryMailer();
-  const app = await buildApp({ config, db, mailer, rateLimit: false }, { logger: false });
+  const collab = createCollabServer({ config, db }, { debounce: 50, maxDebounce: 100, quiet: true });
+  const app = await buildApp({ config, db, mailer, rateLimit: false, collab }, { logger: false });
   await app.ready();
   return {
     app,
     db,
     mailer,
     appOrigin: config.APP_ORIGIN,
+    collab,
     close: async () => {
+      collab.closeConnections();
       await app.close();
       await db.end();
     },

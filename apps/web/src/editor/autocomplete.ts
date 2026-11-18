@@ -4,7 +4,7 @@ import { Plugin, PluginKey, type Command, type EditorState } from '@tiptap/pm/st
 import type { EditorView } from '@tiptap/pm/view';
 import { EXTENSIONS, extractCharacters, extractLocations, TIMES_OF_DAY, type FormatProfile } from '@writers-room/shared';
 import { docBlocks } from './blocks';
-import { currentBlock, enterCommand } from './commands';
+import { currentBlock, enterCommand, tabCommand } from './commands';
 
 export interface Suggestion {
   label: string;
@@ -38,6 +38,7 @@ function suggestionsFor(state: EditorState): Suggestion[] {
       return EXTENSIONS.filter((e) => e.startsWith(typed) && e !== typed).map((label) => ({ label, replaceFrom: paren }));
     }
     const typed = text.toUpperCase();
+    if (!typed) return []; // an empty cue stays quiet so Tab can cycle elements
     return extractCharacters(blocks)
       .map((c) => c.name)
       .filter((name) => name.startsWith(typed) && name !== typed)
@@ -114,7 +115,9 @@ export function autocompletePlugin(profile: FormatProfile): Plugin<AutocompleteS
             view.dispatch(view.state.tr.setMeta(autocompleteKey, { move: -1 }));
             return true;
           case 'Tab':
-            return acceptSuggestion()(view.state, view.dispatch);
+            // Fill in the name, then do what Tab normally does after a filled line (a parenthetical).
+            acceptSuggestion()(view.state, view.dispatch);
+            return tabCommand(profile)(view.state, view.dispatch);
           case 'Enter':
             acceptSuggestion()(view.state, view.dispatch);
             return enterCommand(profile)(view.state, view.dispatch);
@@ -154,6 +157,7 @@ class AutocompleteView {
     const st = autocompleteKey.getState(view.state);
     if (!st || !st.items.length || !view.hasFocus()) {
       this.el.style.display = 'none';
+      this.el.innerHTML = '';
       return;
     }
     this.el.innerHTML = '';

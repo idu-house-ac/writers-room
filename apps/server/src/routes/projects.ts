@@ -109,7 +109,8 @@ async function loadPendingInvites(db: Queryable, projectId: string): Promise<Inv
   }));
 }
 
-async function sendInvite(ctx: AppContext, invite: { id: string; email: string; role: Role }, projectTitle: string, inviterName: string) {
+/** Emails the invitation and returns the link, so an Owner can also copy it by hand (no email set up, or a stuck inbox). */
+async function sendInvite(ctx: AppContext, invite: { id: string; email: string; role: Role }, projectTitle: string, inviterName: string): Promise<string> {
   const token = randomToken();
   await ctx.db.query(
     `update invites set token_hash = $2, expires_at = now() + ($3 || ' days')::interval where id = $1`,
@@ -125,6 +126,7 @@ async function sendInvite(ctx: AppContext, invite: { id: string; email: string; 
       expiresInDays: INVITE_DAYS,
     }),
   );
+  return `${ctx.config.APP_ORIGIN}/invite/${token}`;
 }
 
 async function assertNotLastOwner(db: Queryable, projectId: string, userId: string) {
@@ -315,8 +317,8 @@ export async function projectRoutes(app: FastifyInstance, ctx: AppContext) {
       inviteId = rows[0]!.id;
       reply.code(201);
     }
-    await sendInvite(ctx, { id: inviteId, email: body.email, role: body.role }, project.title, user.name);
-    return { invites: await loadPendingInvites(ctx.db, project.id) };
+    const link = await sendInvite(ctx, { id: inviteId, email: body.email, role: body.role }, project.title, user.name);
+    return { invites: await loadPendingInvites(ctx.db, project.id), link };
   });
 
   app.post<{ Params: { id: string; inviteId: string } }>('/projects/:id/invites/:inviteId/resend', async (request) => {
@@ -328,8 +330,8 @@ export async function projectRoutes(app: FastifyInstance, ctx: AppContext) {
       [request.params.inviteId, project.id],
     );
     if (!rows[0]) throw notFound('That invitation is no longer pending.');
-    await sendInvite(ctx, rows[0], project.title, user.name);
-    return { invites: await loadPendingInvites(ctx.db, project.id) };
+    const link = await sendInvite(ctx, rows[0], project.title, user.name);
+    return { invites: await loadPendingInvites(ctx.db, project.id), link };
   });
 
   app.delete<{ Params: { id: string; inviteId: string } }>('/projects/:id/invites/:inviteId', async (request) => {

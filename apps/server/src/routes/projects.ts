@@ -17,6 +17,7 @@ import { hashToken, randomToken } from '../auth/password';
 import type { Queryable } from '../db';
 import { badRequest, conflict, notFound, parseBody } from '../errors';
 import { inviteEmail } from '../mail';
+import { loadDoc, mergeDoc } from '../docs';
 import { requireUser } from '../plugins/auth';
 import { requireAction } from '../permissions';
 import { findUserByEmail, normaliseEmail } from '../users';
@@ -36,12 +37,14 @@ interface ProjectRow {
   archived_at: Date | null;
   my_role: Role;
   last_editor: UserSummary | null;
+  page_count: number | null;
   members: (UserSummary & { role: Role; addedAt: string })[];
 }
 
 const PROJECT_SELECT = `
   select p.id, p.title, p.format_profile, p.created_at, p.updated_at, p.archived_at,
          me.role as my_role,
+         d.page_count,
          case when ue.id is null then null else
            json_build_object('id', ue.id, 'name', ue.name, 'email', ue.email, 'avatarUrl', ue.avatar_url, 'colour', ue.colour)
          end as last_editor,
@@ -53,6 +56,7 @@ const PROJECT_SELECT = `
             where m.project_id = p.id), '[]'::json) as members
     from projects p
     join project_members me on me.project_id = p.id and me.user_id = $1
+    left join project_docs d on d.project_id = p.id
     left join users ue on ue.id = coalesce(p.updated_by, p.created_by)`;
 
 function toSummary(row: ProjectRow): ProjectSummary {
@@ -61,7 +65,7 @@ function toSummary(row: ProjectRow): ProjectSummary {
     title: row.title,
     formatProfile: row.format_profile,
     myRole: row.my_role,
-    pageCount: null,
+    pageCount: row.page_count,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     archivedAt: row.archived_at ? row.archived_at.toISOString() : null,
@@ -207,8 +211,35 @@ export async function projectRoutes(app: FastifyInstance, ctx: AppContext) {
     );
     const id = rows[0]!.id;
     await ctx.db.query(`insert into project_members (project_id, user_id, role) values ($1, $2, 'owner')`, [id, user.id]);
+    await ctx.db.query(
+      `insert into project_docs (project_id, crdt_state, page_count) select $2, crdt_state, page_count from project_docs where project_id = $1`,
+      [request.params.id, id],
+    );
     reply.code(201);
     return { project: await loadProject(ctx.db, id, user.id) };
+  });
+
+  // ---- Script document (Yjs binary) ----
+
+  app.get<IdParams>('/projects/:id/doc', async (request, reply) => {
+    const user = requireUser(request);
+    await requireAction(ctx.db, request.params.id, user.id, 'read');
+    const doc = await loadDoc(ctx.db, request.params.id);
+    reply.header('content-type', 'application/octet-stream');
+    reply.header('cache-control', 'no-store');
+    reply.header('x-page-count', String(doc?.pageCount ?? 0));
+    reply.header('x-state-vector', doc ? Buffer.from(doc.stateVector).toString('base64') : '');
+    return reply.send(doc ? Buffer.from(doc.state) : Buffer.alloc(0));
+  });
+
+  app.put<IdParams>('/projects/:id/doc', { bodyLimit: 64 * 1024 * 1024 }, async (request) => {
+    const user = requireUser(request);
+    await requireAction(ctx.db, request.params.id, user.id, 'edit');
+    const body = request.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) throw badRequest('Send the Yjs update as application/octet-stream.');
+    const project = await loadProject(ctx.db, request.params.id, user.id);
+    const doc = await mergeDoc(ctx.db, project.id, new Uint8Array(body), project.formatProfile, user.id);
+    return { pageCount: doc.pageCount, stateVector: Buffer.from(doc.stateVector).toString('base64') };
   });
 
   // ---- Members ----

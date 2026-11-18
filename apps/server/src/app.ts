@@ -39,6 +39,8 @@ export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {})
   }
   setupAuth(app, { config: ctx.config, db: ctx.db });
 
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
+
   app.setErrorHandler((err: unknown, _request, reply) => {
     if (err instanceof HttpError) return sendError(reply, err);
     const e = err as { statusCode?: number; code?: string; message?: string };

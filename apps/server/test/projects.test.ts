@@ -16,8 +16,8 @@ beforeAll(async () => {
 afterAll(() => ctx.close());
 
 const get = (url: string, cookie: string) => ctx.app.inject({ method: 'GET', url, headers: { cookie } });
-const post = (url: string, cookie: string, payload?: unknown) => ctx.app.inject({ method: 'POST', url, headers: { cookie }, payload });
-const patch = (url: string, cookie: string, payload?: unknown) => ctx.app.inject({ method: 'PATCH', url, headers: { cookie }, payload });
+const post = (url: string, cookie: string, payload?: Record<string, unknown>) => ctx.app.inject({ method: 'POST', url, headers: { cookie }, payload });
+const patch = (url: string, cookie: string, payload?: Record<string, unknown>) => ctx.app.inject({ method: 'PATCH', url, headers: { cookie }, payload });
 const del = (url: string, cookie: string) => ctx.app.inject({ method: 'DELETE', url, headers: { cookie } });
 
 describe('projects dashboard', () => {

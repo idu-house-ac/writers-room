@@ -2,7 +2,7 @@
 
 Private, self-hosted screenwriting for the Idu House team: live co-writing, comments, version history and an index-card board. The product brief is in [BRIEF.md](BRIEF.md); build notes are in [docs/decisions.md](docs/decisions.md).
 
-**Status: milestone M0 (skeleton).** Accounts, invitations, roles, the projects dashboard and nightly backups work. The script editor arrives in M1.
+**Status: milestone M1 (single-user editor).** Accounts, invitations, roles, the projects dashboard and nightly backups (M0) plus the screenplay editor: feature format, smart typing, Enter/Tab element flow, autocomplete, scene navigator with drag-to-reorder, characters and locations lists, page view with real page breaks, draft view, find and replace, rename character everywhere, light and dark themes, focus mode, zoom, continuous autosave. Live co-writing arrives in M2.
 
 ## Run it
 
@@ -55,6 +55,17 @@ pnpm test
 ```bash
 pnpm typecheck
 ```
+
+## Writing
+
+Open a project and type. The editor follows the usual screenwriting flow:
+
+- Start a line with `INT.` or `EXT.` for a scene heading. A line in capitals ending in `TO:` becomes a transition.
+- **Enter** moves to the next element (scene heading → action, character → dialogue, dialogue → action...). **Tab** switches (action → character, dialogue → parenthetical, empty character → action). Enter on an empty line turns it back into action.
+- **Ctrl/Cmd+1..8** set the element directly: scene heading, action, character, parenthetical, dialogue, transition, shot, centered.
+- Character names, locations and times of day are suggested from the script as you type; Enter accepts and moves on, Tab accepts, Esc hides.
+- **Ctrl/Cmd+F** finds and replaces. The Characters tab renames a character everywhere.
+- Page view shows pages as they will print, with (MORE) and (CONT'D) on split dialogue. Draft view hides page breaks.
 
 ## Layout
 

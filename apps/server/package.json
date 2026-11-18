@@ -16,11 +16,14 @@
     "@fastify/cors": "^11.4.3",
     "@fastify/rate-limit": "^11.2.2",
     "@fastify/static": "^10.1.11",
+    "@tiptap/pm": "^3.34.0",
+    "@tiptap/y-tiptap": "^3.3.0",
     "@writers-room/shared": "workspace:*",
     "fastify": "^5.12.8",
     "nodemailer": "^10.6.0",
     "pg": "^8.23.1",
     "pino-pretty": "^13.2.0",
+    "yjs": "^13.6.33",
     "zod": "^4.6.7"
   },
   "devDependencies": {

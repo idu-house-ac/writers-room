@@ -160,3 +160,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .coming .paper { margin: 0 auto 20px; width: 170px; height: 220px; background: var(--paper); color: var(--paper-ink); border-radius: 4px; font-family: var(--font-mono); font-size: 9px; text-align: left; padding: 22px 18px; line-height: 1.6; opacity: 0.9; }
 .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent); animation: spin 0.8s linear infinite; margin: 40px auto; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Light theme */
+:root[data-theme='light'] {
+  --bg: #efebe4;
+  --surface: #faf8f4;
+  --surface-2: #f1ede6;
+  --surface-3: #e6e0d6;
+  --border: #ddd6cb;
+  --border-strong: #c8bfb1;
+  --text: #1c1a17;
+  --muted: #6b645b;
+  --faint: #9a9288;
+  --accent: #c8952e;
+  --accent-hover: #b4841f;
+  --accent-ink: #1a1408;
+  --paper: #ffffff;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+:root[data-theme='light'] .topbar { background: rgba(250, 248, 244, 0.92); }
+:root[data-theme='light'] .project-card .thumb { border-bottom-color: var(--border); }

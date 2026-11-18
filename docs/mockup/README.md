@@ -1,0 +1,1 @@
+Put screenshots of the five mockup screens here (dashboard, editor, index cards, version history, share and roles) plus the architecture diagram from BRIEF.md. None were available when M0 was built; M0 followed the written screen descriptions in the brief.

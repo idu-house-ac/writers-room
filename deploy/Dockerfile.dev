@@ -1,0 +1,12 @@
+# Development image shared by the `server` and `web` services. Source is bind-mounted at runtime;
+# this image only carries Node, pnpm and the installed dependencies.
+FROM node:22-alpine
+RUN npm install -g pnpm@10 --no-fund --no-audit
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/server/package.json apps/server/
+COPY apps/web/package.json apps/web/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile
+COPY . .
+EXPOSE 3000 5173

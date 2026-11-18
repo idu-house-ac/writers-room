@@ -58,33 +58,99 @@ Every push to `main` on GitHub redeploys automatically. If a deploy fails, the *
 
 Same shape: create a Postgres database, create a service from the repository with `deploy/Dockerfile` as the Dockerfile (build context is the repository root), expose port 3000, set the health check path to `/api/health`, set the variables from the table above, deploy. Follow the provider's docs for the exact clicks.
 
-## Option B: your own server with Docker Compose
+## Option B: your own server with Docker Compose, step by step
 
-Requirements: a Linux VPS with Docker installed, a domain name pointing at it (A record), ports 80 and 443 open.
+The cheapest reliable setup. Written for Hetzner Cloud; DigitalOcean or Linode work the same way with different buttons. Prices quoted are approximate and change; check the provider's pricing page.
+
+### 1. Rent the server (about 10 minutes)
+
+1. Create an account at hetzner.com (Cloud). New accounts may be asked for ID verification.
+2. In the Cloud Console: **New project**, then **Servers → Add server**.
+   - **Location**: the one closest to the team (Hetzner has Germany, Finland, the US and Singapore).
+   - **Image**: Ubuntu, newest LTS.
+   - **Type**: the smallest **shared vCPU** plan with at least 2 GB of memory (for example CX23 or CPX12/CPX22, whichever is orderable in that location). Roughly 4 to 12 EUR a month depending on plan and location.
+   - **SSH key**: add your Mac's public key. If you do not have one, run `ssh-keygen -t ed25519` in Terminal and paste the contents of `~/.ssh/id_ed25519.pub`. Without a key you get a root password by email instead, which also works.
+   - **Firewall**: create one that allows inbound TCP 22, 80 and 443 and attach it.
+   - **Backups**: enable. This adds about 20% to the price and gives daily snapshots of the whole disk, which is the simplest off-box backup.
+3. Note the server's public IP address.
+
+### 2. Point a domain at it
+
+At your DNS provider (wherever iduhouse.com is managed), add an **A record**: name `writers` (so the address becomes `writers.iduhouse.com`), value the server IP. Wait until `ping writers.iduhouse.com` from your Mac answers with that IP; this can take a few minutes to an hour.
+
+### 3. Prepare the server (about 10 minutes, once)
+
+Connect:
 
 ```bash
-git clone https://github.com/idu-house-ac/writers-room.git && cd writers-room
+ssh root@YOUR.SERVER.IP
 ```
+
+Install updates and Docker:
 
 ```bash
-cp .env.example .env
+apt update && apt -y upgrade && curl -fsSL https://get.docker.com | sh
 ```
 
-Edit `.env`: set `DOMAIN`, `APP_ORIGIN=https://<DOMAIN>`, a long random `SESSION_SECRET`, a `POSTGRES_PASSWORD`, the bootstrap owner, and the `SMTP_*` values if you have an email provider. Then:
+Give the server read access to the private GitHub repository with a deploy key:
+
+```bash
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 && cat ~/.ssh/id_ed25519.pub
+```
+
+Copy the printed line. On GitHub open the repository → **Settings → Deploy keys → Add deploy key**, paste it, leave "Allow write access" unchecked, save. Then:
+
+```bash
+git clone git@github.com:idu-house-ac/writers-room.git && cd writers-room
+```
+
+Answer `yes` when asked about GitHub's host key.
+
+### 4. Configure and start
+
+```bash
+cp .env.example .env && nano .env
+```
+
+Set these lines (Ctrl+O saves, Ctrl+X leaves nano):
+
+```
+DOMAIN=writers.iduhouse.com
+APP_ORIGIN=https://writers.iduhouse.com
+SESSION_SECRET=<output of: openssl rand -hex 32>
+POSTGRES_PASSWORD=<output of: openssl rand -hex 16>
+BOOTSTRAP_OWNER_EMAIL=you@example.com
+BOOTSTRAP_OWNER_NAME=Your Name
+BOOTSTRAP_OWNER_PASSWORD=<a strong password>
+```
+
+Leave the `SMTP_*` lines empty for now; invitations work through the link the Share dialog shows. Then:
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Caddy fetches a certificate from Let's Encrypt on first start (DNS must already resolve). Open `https://<DOMAIN>`.
-
-Updating to a new version:
+The first start takes a few minutes. Watch it with:
 
 ```bash
-git pull && docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml logs -f app
 ```
 
-Logs: `docker compose -f docker-compose.prod.yml logs -f app`. Backups land in `./backups/` nightly; see `docs/runbooks/backups.md` for restore drills.
+When you see `Server listening`, open `https://writers.iduhouse.com`. Caddy fetched the certificate automatically. Sign in with the bootstrap owner, create a project, click **Share**, invite the team.
+
+### 5. Keep it running
+
+- **Update** after new code lands on `main`:
+  ```bash
+  cd ~/writers-room && git pull && docker compose -f docker-compose.prod.yml up -d --build
+  ```
+- **System updates** once a month: `apt update && apt -y upgrade`, then `reboot` if it says a restart is needed. Everything comes back on its own.
+- **Backups**: Hetzner's daily server backups cover the whole machine. The app also writes a nightly database dump to `~/writers-room/backups/`. Once a month, run the restore drill in `docs/runbooks/backups.md`, and copy a recent dump to your Mac:
+  ```bash
+  scp root@YOUR.SERVER.IP:~/writers-room/backups/writers-room-*.dump ~/Downloads/
+  ```
+- **Disk space**: `df -h /` should stay under 80%. Old Docker images can be cleaned with `docker image prune -f`.
+- **Email later**: fill in the `SMTP_*` lines in `.env` and run the update command; the server restarts with email enabled.
 
 ## Try it locally in production mode
 

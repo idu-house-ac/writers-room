@@ -11,6 +11,9 @@ import type { Mailer } from './mail';
 import { setupAuth } from './plugins/auth';
 import { authRoutes } from './routes/auth';
 import { projectRoutes } from './routes/projects';
+import { presenceOf, type CollabContext } from './collab';
+import type { Server as CollabServer } from '@hocuspocus/server';
+import { requireUser } from './plugins/auth';
 
 export interface AppContext {
   config: Config;
@@ -18,6 +21,8 @@ export interface AppContext {
   mailer: Mailer;
   /** Rate limiting is on everywhere except in automated tests. */
   rateLimit: boolean;
+  /** The collaboration server, when running in this process (presence lookups). */
+  collab?: CollabServer<CollabContext>;
 }
 
 export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
@@ -60,6 +65,12 @@ export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {})
     async (api) => {
       await authRoutes(api, ctx);
       await projectRoutes(api, ctx);
+      api.get('/presence', async (request) => {
+        const user = requireUser(request);
+        if (!ctx.collab) return { presence: {} };
+        const { rows } = await ctx.db.query<{ project_id: string }>('select project_id from project_members where user_id = $1', [user.id]);
+        return { presence: presenceOf(ctx.collab.hocuspocus, rows.map((r) => r.project_id)) };
+      });
     },
     { prefix: '/api' },
   );

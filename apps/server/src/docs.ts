@@ -60,6 +60,21 @@ export async function loadDoc(db: Queryable, projectId: string): Promise<StoredD
   return { state, stateVector: Y.encodeStateVector(ydoc), pageCount: row.page_count };
 }
 
+/** Persist a Y.Doc as the project's document and refresh the page count and "last edited" fields. */
+export async function writeDoc(db: Queryable, projectId: string, ydoc: Y.Doc, profile: FormatProfileId, userId: string | null): Promise<StoredDoc> {
+  const state = Y.encodeStateAsUpdate(ydoc);
+  const blocks = docJsonToBlocks(yDocToProsemirrorJSON(ydoc, SCRIPT_FIELD) as { content?: PmNode[] });
+  const pageCount = pageCountOf(blocks, profile);
+  await db.query(
+    `insert into project_docs (project_id, crdt_state, page_count, updated_at) values ($1, $2, $3, now())
+     on conflict (project_id) do update set crdt_state = excluded.crdt_state, page_count = excluded.page_count, updated_at = now()`,
+    [projectId, Buffer.from(state), pageCount],
+  );
+  if (userId) await db.query('update projects set updated_at = now(), updated_by = $2 where id = $1', [projectId, userId]);
+  else await db.query('update projects set updated_at = now() where id = $1', [projectId]);
+  return { state, stateVector: Y.encodeStateVector(ydoc), pageCount };
+}
+
 /**
  * Merge an incoming Yjs update into the stored document. The update may be a full state or a diff;
  * Yjs merges either without conflicts. Returns the new state vector and page count.
@@ -75,14 +90,5 @@ export async function mergeDoc(
   const ydoc = new Y.Doc();
   if (existing) Y.applyUpdate(ydoc, existing.state);
   Y.applyUpdate(ydoc, update);
-  const state = Y.encodeStateAsUpdate(ydoc);
-  const blocks = docJsonToBlocks(yDocToProsemirrorJSON(ydoc, SCRIPT_FIELD) as { content?: PmNode[] });
-  const pageCount = pageCountOf(blocks, profile);
-  await db.query(
-    `insert into project_docs (project_id, crdt_state, page_count, updated_at) values ($1, $2, $3, now())
-     on conflict (project_id) do update set crdt_state = excluded.crdt_state, page_count = excluded.page_count, updated_at = now()`,
-    [projectId, Buffer.from(state), pageCount],
-  );
-  await db.query('update projects set updated_at = now(), updated_by = $2 where id = $1', [projectId, userId]);
-  return { state, stateVector: Y.encodeStateVector(ydoc), pageCount };
+  return writeDoc(db, projectId, ydoc, profile, userId);
 }

@@ -4,10 +4,12 @@ import { TextSelection } from '@tiptap/pm/state';
 import { extractCharacters, extractLocations } from '@writers-room/shared';
 import { docBlocks, moveScene, renameCharacter, sceneRanges } from './blocks';
 import { paginationKey } from './pagination';
+import type { Collaborator } from './presence';
+import { initials } from '../lib/time';
 
 type Tab = 'scenes' | 'characters' | 'locations';
 
-export function Sidebar({ editor, canEdit }: { editor: Editor | null; canEdit: boolean }) {
+export function Sidebar({ editor, canEdit, people = [] }: { editor: Editor | null; canEdit: boolean; people?: Collaborator[] }) {
   const [tab, setTab] = useState<Tab>('scenes');
   const [drag, setDrag] = useState<{ from: number; over: number | null; after: boolean }>({ from: -1, over: null, after: false });
 
@@ -75,7 +77,22 @@ export function Sidebar({ editor, canEdit }: { editor: Editor | null; canEdit: b
                 title={canEdit ? 'Click to jump, drag to reorder' : 'Click to jump'}
               >
                 <span className="num">{s.number}</span>
-                <span className="heading">{s.heading || '(untitled scene)'}</span>
+                <span className="heading">
+                  {s.heading || '(untitled scene)'}
+                  {(() => {
+                    const next = scenes[i + 1];
+                    const here = people.filter((p) => p.pos !== null && p.pos >= s.from && (!next || p.pos < next.from));
+                    if (!here.length) return null;
+                    const seen = new Set<string>();
+                    return (
+                      <span className="dots" aria-label={`Here: ${here.map((p) => p.name).join(', ')}`}>
+                        {here.filter((p) => !seen.has(p.id) && seen.add(p.id)).map((p) => (
+                          <span key={p.id} className="dot" style={{ background: p.color }} title={`${p.name} (${initials(p.name)}) is in this scene`} />
+                        ))}
+                      </span>
+                    );
+                  })()}
+                </span>
                 <span className="pg">p. {pagination?.pageOfBlock[s.block] ?? '–'}</span>
               </div>
             ))

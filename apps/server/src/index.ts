@@ -3,6 +3,7 @@ import { bootstrapOwner } from './bootstrap';
 import { loadConfig } from './config';
 import { createDb, migrate } from './db';
 import { createMailer } from './mail';
+import { createCollabServer } from './collab';
 
 const config = loadConfig();
 const db = createDb(config.DATABASE_URL);
@@ -22,13 +23,17 @@ for (let attempt = 1; ; attempt++) {
 const applied = await migrate(db);
 if (applied.length) console.log(`Applied migrations: ${applied.join(', ')}`);
 
-const app = await buildApp({ config, db, mailer: createMailer(config, (m) => app.log.info(m)), rateLimit: true });
+const collab = createCollabServer({ config, db });
+const app = await buildApp({ config, db, mailer: createMailer(config, (m) => app.log.info(m)), rateLimit: true, collab });
 await bootstrapOwner(db, config, (m) => app.log.info(m));
 
 await app.listen({ port: config.PORT, host: config.HOST });
+await collab.listen(config.COLLAB_PORT);
+app.log.info(`Collaboration server listening on port ${config.COLLAB_PORT}`);
 app.log.info(`Mail transport: ${config.mailTransport}${config.SMTP_HOST ? ` (${config.SMTP_HOST}:${config.SMTP_PORT})` : ''}`);
 
 const shutdown = async () => {
+  await collab.destroy();
   await app.close();
   await db.end();
   process.exit(0);

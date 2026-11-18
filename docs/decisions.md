@@ -2,6 +2,22 @@
 
 Kept short, newest first. Each entry says what was chosen, why, and what was checked.
 
+## M2 (Nov 2026)
+
+**Collaboration server.** Hocuspocus 4.8 (`@hocuspocus/server`, MIT) runs inside the API process on its own port (`COLLAB_PORT`, default 3001); the web app reaches it at `/collab` (Vite proxies it in development; Caddy will in M7). Verified against the installed types: the entry point is the `Server` class (`listen`, `destroy`, `.hocuspocus` for documents and connection counts). `listen(0)` does not pick a random port, it falls back to the default, so tests choose a port explicitly.
+
+**Authentication over the cookie.** The browser's WebSocket upgrade carries the session cookie, so `onAuthenticate` unsigns it with `@fastify/cookie`'s `Signer`, loads the session and looks up the membership. Non-members and signed-out sockets are refused; Commenters and Readers get `connectionConfig.readOnly = true`, which makes the server drop their document updates (verified by test: a reader's edit never reaches another client or the database). The provider's `token` is a fixed placeholder, only there to make the client run the authentication step.
+
+**Provider quirk.** A `HocuspocusProvider` given an external `websocketProvider` must call `attach()` itself; one constructed with a `url` attaches automatically. Also, the reconnect helper rejects a `delay` below `minDelay` (1000 ms) and then never connects, silently. Both cost an hour; the tests document them.
+
+**Persistence.** The same `project_docs` table as M1: `onLoadDocument` applies the stored state, `onStoreDocument` (debounced 2 s, at most 10 s) writes the full state back, recomputes the page count with the shared engine and stamps the project's last editor from the connection context. The M1 REST `PUT /doc` route stays for imports and tests.
+
+**Offline.** `y-indexeddb` caches the document per project in the browser; edits made offline are kept across tab closes and merge when the socket returns. The status bar shows "Offline, changes saved locally" from the provider's connection state plus `navigator.onLine`. Verified in a two-browser run: a tab taken offline, edited, closed, brought back online and reopened merged its edit with a concurrent online edit, both documents identical.
+
+**Presence.** `@tiptap/extension-collaboration-caret` publishes each user's caret as awareness state and draws named carets. The scene navigator shows a coloured dot per collaborator in each scene (relative cursor positions resolved through the sync plugin's mapping). Click an avatar to follow that person: the view scrolls to their caret on every update until you scroll or type. The dashboard's "is writing" badge comes from `GET /api/presence`, which reads awareness states of the loaded documents, polled every 10 s.
+
+**Fresh document edge.** When a brand-new empty script is opened by two people who both start typing before either has synced a first block, each browser's initial empty line becomes its own block, so the document may begin with two action lines. Harmless and easy to delete; noted so nobody hunts for it.
+
 ## M1 (Nov 2026)
 
 **Editor stack.** Tiptap 3.34 on ProseMirror (`@tiptap/core`, `@tiptap/react`, `@tiptap/pm`), with one node type per screenplay element (`apps/web/src/editor/elements.ts`). Verified against the installed type definitions: Tiptap 3's collaboration extension is `@tiptap/extension-collaboration` (takes `document` + `field`, or `fragment`) and depends on `@tiptap/y-tiptap` (Tiptap's fork of y-prosemirror); the cursor package is now `@tiptap/extension-collaboration-caret` (the old `-cursor` name stopped at 2.x). Both are MIT. The caret package is not used until M2.

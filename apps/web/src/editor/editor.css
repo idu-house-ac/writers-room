@@ -72,3 +72,18 @@
 .findbar .count { color: var(--muted); font-size: 12.5px; min-width: 60px; }
 
 .editor-loading { display: grid; place-items: center; height: 100vh; color: var(--muted); }
+
+/* Presence and collaborator carets */
+.presence { display: flex; gap: 6px; align-items: center; }
+.presence-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 2px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); cursor: pointer; font-size: 12.5px; }
+.presence-chip:hover { border-color: var(--c); }
+.presence-chip.following { border-color: var(--c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent); }
+.presence-chip .avatar { width: 22px; height: 22px; font-size: 10px; border: 0; }
+.scene-item .dots { display: inline-flex; gap: 3px; margin-left: 4px; }
+.scene-item .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.collaboration-carets__caret { position: relative; margin-left: -1px; margin-right: -1px; border-left: 1px solid; border-right: 1px solid; word-break: normal; pointer-events: none; }
+.collaboration-carets__label { position: absolute; top: -1.35em; left: -1px; font: 600 10px/1.4 var(--font-ui); color: #121110; padding: 1px 6px; border-radius: 4px 4px 4px 0; white-space: nowrap; user-select: none; pointer-events: none; }
+.collaboration-carets__selection { pointer-events: none; }
+.statusbar .offline-note { color: var(--accent); }
+.is-here { display: inline-flex; align-items: center; gap: 6px; }
+.is-here .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(79, 196, 139, 0.2); }

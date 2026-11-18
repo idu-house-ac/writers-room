@@ -5,7 +5,7 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import type { Node as PmNode } from '@tiptap/pm/model';
 import { ELEMENT_TYPES, FEATURE_PROFILE, type ElementType } from '@writers-room/shared';
 import { baseExtensions } from './elements';
-import { enterCommand, setElement, tabCommand, skipClosingParen, EMPTY_ENTER_TARGET } from './commands';
+import { enterCommand, setElement, tabCommand, shiftTabCommand, skipClosingParen, cycleElement, EMPTY_ENTER_TARGET } from './commands';
 import { smartTypeTarget, uppercasePlugin } from './smartType';
 
 const schema = getSchema(baseExtensions);
@@ -82,16 +82,34 @@ describe('Enter inside a block splits it and keeps the element', () => {
   });
 });
 
-describe('Tab on an empty block converts it in place', () => {
+describe('Tab on an empty line cycles through every element', () => {
   for (const type of ELEMENT_TYPES) {
-    it(`${type} → ${P.elements[type].tabTo}`, () => {
+    it(`${type} → ${cycleElement(type, 1)}`, () => {
       const r = run(stateAt([[type, '']]), tabCommand(P));
       expect(r.ok).toBe(true);
-      const target = P.elements[type].tabTo;
+      const target = cycleElement(type, 1);
       expect(r.blocks).toEqual([[target, target === 'parenthetical' ? '()' : '']]);
-      if (target === 'parenthetical') expect(r.cursorOffset).toBe(1);
+      expect(r.cursorOffset).toBe(target === 'parenthetical' ? 1 : 0);
     });
   }
+  it('visits all eight elements and comes back round', () => {
+    let s = stateAt([['action', '']]);
+    const seen: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      s = run(s, tabCommand(P)).state;
+      seen.push(s.doc.firstChild!.type.name);
+    }
+    expect(seen).toEqual(['character', 'parenthetical', 'dialogue', 'transition', 'shot', 'centered', 'sceneHeading', 'action']);
+    expect(s.doc.firstChild!.textContent).toBe('');
+  });
+  it('Shift+Tab cycles backwards and a blank parenthetical counts as empty', () => {
+    let s = stateAt([['parenthetical', '()']], 0, 1);
+    s = run(s, shiftTabCommand(P)).state;
+    expect(s.doc.firstChild!.type.name).toBe('character');
+    expect(s.doc.firstChild!.textContent).toBe('');
+    s = run(s, shiftTabCommand(P)).state;
+    expect(s.doc.firstChild!.type.name).toBe('action');
+  });
 });
 
 describe('Tab after a filled block adds the next element', () => {

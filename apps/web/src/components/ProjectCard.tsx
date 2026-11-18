@@ -1,16 +1,19 @@
 import { Link } from 'react-router';
-import { can, FORMAT_LABELS, ROLE_LABELS, type ProjectSummary } from '@writers-room/shared';
+import { can, FORMAT_LABELS, ROLE_LABELS, type ProjectSummary, type UserSummary } from '@writers-room/shared';
 import { timeAgo } from '../lib/time';
 import { Avatar } from './Avatar';
 import { Menu } from './Menu';
 
 export function ProjectCard({
   project,
+  here = [],
   onArchive,
   onUnarchive,
   onDuplicate,
 }: {
   project: ProjectSummary;
+  /** People connected to this project's script right now. */
+  here?: UserSummary[];
   onArchive: () => void;
   onUnarchive: () => void;
   onDuplicate: () => void;
@@ -65,6 +68,12 @@ export function ProjectCard({
           <span className="badge badge-accent">{FORMAT_LABELS[project.formatProfile]}</span>
           <span className="badge">{ROLE_LABELS[project.myRole]}</span>
           {archived && <span className="badge">Archived</span>}
+          {here.length > 0 && (
+            <span className="badge badge-live is-here" title={`${here.map((u) => u.name).join(', ')} ${here.length === 1 ? 'is' : 'are'} in the script now`}>
+              <span className="dot" aria-hidden="true" />
+              {here.length === 1 ? `${here[0]!.name.split(' ')[0]} is writing` : `${here.length} writing`}
+            </span>
+          )}
         </div>
         <div className="row between" style={{ alignItems: 'flex-end' }}>
           <span className="small muted">

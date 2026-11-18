@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { Link } from 'react-router';
 import { can, FORMAT_LABELS, getProfile, ROLE_LABELS, type ProjectDetail } from '@writers-room/shared';
 import { api, errorMessage } from '../api';
@@ -16,7 +17,9 @@ import { FindBar } from './FindBar';
 import { paginationKey, setViewMode, type ViewMode } from './pagination';
 import { profileCss } from './pageStyles';
 import { ScreenplayKit } from './ScreenplayKit';
-import { SCRIPT_FIELD, type ScriptDoc } from './scriptDoc';
+import { SCRIPT_FIELD, type CollabDoc, type SyncStatus } from './collab';
+import { collaborators } from './presence';
+import { PresenceBar } from './PresenceBar';
 import { Sidebar } from './Sidebar';
 import { SmartType } from './smartType';
 import { Toolbar } from './Toolbar';
@@ -24,16 +27,16 @@ import { useEditorTick } from './useEditorTick';
 import { docBlocks } from './blocks';
 import './editor.css';
 
-const STATUS_LABEL: Record<ScriptDoc['status'], string> = {
-  loading: 'Loading',
-  saved: 'Saved',
-  unsaved: 'Unsaved changes',
+const STATUS_LABEL: Record<SyncStatus, string> = {
+  connecting: 'Connecting…',
+  synced: 'Saved',
   saving: 'Saving…',
-  error: 'Save failed, retrying',
+  offline: 'Offline, changes saved locally',
   readonly: 'Read only',
+  denied: 'Not allowed to open this script',
 };
 
-export function EditorScreen({ project, doc, onProjectChange }: { project: ProjectDetail; doc: ScriptDoc; onProjectChange: (p: ProjectDetail) => void }) {
+export function EditorScreen({ project, doc, onProjectChange }: { project: ProjectDetail; doc: CollabDoc; onProjectChange: (p: ProjectDetail) => void }) {
   const { user, signOut } = useAuth();
   const profile = useMemo(() => getProfile(project.formatProfile), [project.formatProfile]);
   const canEdit = can(project.myRole, 'edit');
@@ -47,6 +50,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
   const [title, setTitle] = useState(project.title);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState(doc.status);
+  const [following, setFollowing] = useState<number | null>(null);
 
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => doc.subscribe(() => setSaveStatus(doc.status)), [doc]);
@@ -56,6 +60,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
       extensions: [
         ...baseExtensions,
         Collaboration.configure({ document: doc.ydoc, field: SCRIPT_FIELD }),
+        CollaborationCaret.configure({ provider: doc.provider, user: { id: user?.id, name: user?.name ?? 'Someone', color: user?.colour ?? '#888' } }),
         ScreenplayKit.configure({ profile }),
         SmartType.configure({ profile }),
         EditorPlugins.configure({ profile, mode: 'page' }),
@@ -92,6 +97,38 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
     return () => window.removeEventListener('keydown', onKey);
   }, [findOpen, focus]);
 
+  const people = editor ? collaborators(editor, doc.provider, doc.ydoc.clientID) : [];
+
+  // Follow mode: keep the followed person's caret in view until the reader scrolls or types.
+  useEffect(() => {
+    if (!editor || following === null) return;
+    const target = people.find((p) => p.clientId === following);
+    if (!target) {
+      setFollowing(null);
+      return;
+    }
+    if (target.pos !== null) {
+      try {
+        const dom = editor.view.domAtPos(Math.min(target.pos, editor.state.doc.content.size)).node;
+        const el = dom instanceof Element ? dom : dom.parentElement;
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch {
+        /* position not rendered yet */
+      }
+    }
+  });
+  useEffect(() => {
+    if (following === null) return;
+    const stop = () => setFollowing(null);
+    const scroller = document.querySelector('.paper-scroll');
+    scroller?.addEventListener('wheel', stop, { passive: true });
+    window.addEventListener('keydown', stop);
+    return () => {
+      scroller?.removeEventListener('wheel', stop);
+      window.removeEventListener('keydown', stop);
+    };
+  }, [following]);
+
   const pagination = editor ? paginationKey.getState(editor.state)?.result : undefined;
   const blocks = editor ? docBlocks(editor.state.doc).blocks : [];
   const hasText = blocks.some((b) => b.text.trim() !== '');
@@ -110,7 +147,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
     }
   }
 
-  const statusDot = saveStatus === 'saved' ? '' : saveStatus === 'error' ? 'bad' : saveStatus === 'readonly' ? 'off' : 'busy';
+  const statusDot = saveStatus === 'synced' ? '' : saveStatus === 'denied' ? 'bad' : saveStatus === 'readonly' ? 'off' : saveStatus === 'offline' ? 'bad' : 'busy';
 
   return (
     <div className={`editor-screen${focus ? ' focus-mode' : ''}${mode === 'draft' ? ' draft-mode' : ''}`}>
@@ -150,7 +187,9 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
         <span className="badge">{ROLE_LABELS[project.myRole]}</span>
         {error && <span className="error">{error}</span>}
         <div className="grow" />
-        <div className="avatar-stack">
+        <PresenceBar people={people} following={following} onFollow={setFollowing} />
+        <span className="sep" />
+        <div className="avatar-stack" title="Project members">
           {project.members.map((m) => (
             <Avatar key={m.id} user={m} title={`${m.name} · ${ROLE_LABELS[m.role]}`} />
           ))}
@@ -172,7 +211,6 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
                   role="menuitem"
                   onClick={async () => {
                     close();
-                    await doc.flush();
                     await signOut();
                   }}
                 >
@@ -202,7 +240,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
       </div>
 
       <div className="editor-body">
-        <Sidebar editor={editor} canEdit={canEdit} />
+        <Sidebar editor={editor} canEdit={canEdit} people={people} />
         <div className="paper-scroll" onClick={(e) => e.target === e.currentTarget && editor?.commands.focus()}>
           <div className="paper-wrap" style={{ ['--zoom' as string]: zoom }}>
             <EditorContent editor={editor} />
@@ -211,10 +249,11 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
       </div>
 
       <footer className="statusbar">
-        <span>
+        <span className={saveStatus === 'offline' ? 'offline-note' : undefined}>
           <span className={`dot ${statusDot}`} aria-hidden="true" />
           {STATUS_LABEL[saveStatus]}
         </span>
+        {following !== null && <span>Following {people.find((p) => p.clientId === following)?.name ?? '…'} · scroll or type to stop</span>}
         <span>
           {pageCount} {pageCount === 1 ? 'page' : 'pages'}
         </span>

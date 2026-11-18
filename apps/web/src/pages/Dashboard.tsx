@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FORMAT_LABELS, FORMAT_PROFILES, type FormatProfileId, type ProjectSummary } from '@writers-room/shared';
+import { FORMAT_LABELS, FORMAT_PROFILES, type FormatProfileId, type ProjectSummary, type UserSummary } from '@writers-room/shared';
 import { api, errorMessage } from '../api';
 import { NewProjectDialog } from '../components/NewProjectDialog';
 import { ProjectCard } from '../components/ProjectCard';
@@ -12,6 +12,25 @@ export function DashboardPage() {
   const [format, setFormat] = useState<FormatProfileId | 'all'>('all');
   const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [presence, setPresence] = useState<Record<string, UserSummary[]>>({});
+
+  useEffect(() => {
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const r = await api<{ presence: Record<string, UserSummary[]> }>('/presence');
+        if (!stopped) setPresence(r.presence);
+      } catch {
+        /* offline: keep the last answer */
+      }
+    };
+    void poll();
+    const t = setInterval(poll, 10_000);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+  }, []);
 
   async function load() {
     try {
@@ -99,6 +118,7 @@ export function DashboardPage() {
               <ProjectCard
                 key={p.id}
                 project={p}
+                here={presence[p.id] ?? []}
                 onArchive={() => act(`/projects/${p.id}/archive`)}
                 onUnarchive={() => act(`/projects/${p.id}/unarchive`)}
                 onDuplicate={() => act(`/projects/${p.id}/duplicate`)}

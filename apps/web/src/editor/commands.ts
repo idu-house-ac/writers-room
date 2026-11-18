@@ -2,7 +2,7 @@
 // without a DOM, so the transition table from BRIEF.md is unit-tested directly (see commands.test.ts).
 import { TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import type { Node as PmNode, ResolvedPos } from '@tiptap/pm/model';
-import type { ElementType, FormatProfile } from '@writers-room/shared';
+import { ELEMENT_TYPES, type ElementType, type FormatProfile } from '@writers-room/shared';
 import { isElementType } from './elements';
 
 export interface BlockInfo {
@@ -108,10 +108,37 @@ export function enterCommand(profile: FormatProfile): Command {
   };
 }
 
+/** A block counts as empty when it has no text, or is a parenthetical holding only its brackets. */
+export function isBlank(info: BlockInfo): boolean {
+  return info.empty || (info.type === 'parenthetical' && info.node.textContent === '()');
+}
+
+/** Next element in the Mod+1..8 order (wrapping), used when cycling an empty line with Tab. */
+export function cycleElement(type: ElementType, step: 1 | -1): ElementType {
+  const i = ELEMENT_TYPES.indexOf(type);
+  return ELEMENT_TYPES[(i + step + ELEMENT_TYPES.length) % ELEMENT_TYPES.length]!;
+}
+
+/** Convert an empty block to another element; parentheticals get their brackets, cursor between. */
+function convertEmpty(tr: Transaction, info: BlockInfo, target: ElementType): Transaction {
+  const $pos = tr.selection.$from;
+  if (!info.empty) tr.delete(info.before + 1, info.after - 1); // drop "()" of a blank parenthetical
+  const $after = tr.doc.resolve(info.before + 1);
+  convertInPlace(tr, $after, target);
+  if (target === 'parenthetical') {
+    tr.insertText('()', info.before + 1);
+    tr.setSelection(TextSelection.create(tr.doc, info.before + 2));
+  } else {
+    tr.setSelection(TextSelection.create(tr.doc, info.before + 1));
+  }
+  void $pos;
+  return tr;
+}
+
 /**
  * Tab:
- *  - empty block: convert it in place to the element's `tabTo` type
- *  - filled block: new block after it of the `tabTo` type; a filled character cue gets a parenthetical
+ *  - empty line: cycle to the next element in Mod+1..8 order (Shift+Tab cycles back)
+ *  - filled line: new block after it of the element's `tabTo` type; a filled character cue gets a parenthetical
  *  - a new parenthetical comes with its brackets, cursor between them
  */
 export function tabCommand(profile: FormatProfile): Command {
@@ -122,12 +149,8 @@ export function tabCommand(profile: FormatProfile): Command {
     const tr = state.tr;
     const $pos = tr.selection.$from;
 
-    if (info.empty) {
-      convertInPlace(tr, $pos, rule.tabTo);
-      if (rule.tabTo === 'parenthetical') {
-        tr.insertText('()', $pos.pos);
-        tr.setSelection(TextSelection.create(tr.doc, $pos.pos + 1));
-      }
+    if (isBlank(info)) {
+      convertEmpty(tr, info, cycleElement(info.type, 1));
     } else {
       const target: ElementType = info.type === 'character' ? 'parenthetical' : rule.tabTo;
       if (target === 'parenthetical') insertBlockAfter(tr, $pos, target, '()', 1);
@@ -138,17 +161,15 @@ export function tabCommand(profile: FormatProfile): Command {
   };
 }
 
-/** Shift+Tab: step the current block backwards through the element order (action ↔ character etc.). */
+/** Shift+Tab: an empty line cycles backwards; a filled line steps its element back one place. */
 export function shiftTabCommand(profile: FormatProfile): Command {
   return (state, dispatch) => {
     const info = currentBlock(state);
     if (!info) return false;
-    // Reverse of tabTo for the common cases; otherwise action.
-    const reverse: Partial<Record<ElementType, ElementType>> = { character: 'action', parenthetical: 'dialogue', dialogue: 'character', transition: 'action', sceneHeading: 'action' };
-    const target = reverse[info.type] ?? 'action';
-    if (target === info.type) return false;
     void profile;
-    dispatch?.(convertInPlace(state.tr, state.selection.$from, target).scrollIntoView());
+    const target = cycleElement(info.type, -1);
+    const tr = isBlank(info) ? convertEmpty(state.tr, info, target) : convertInPlace(state.tr, state.selection.$from, target);
+    dispatch?.(tr.scrollIntoView());
     return true;
   };
 }

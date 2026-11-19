@@ -28,7 +28,7 @@ export async function createTestApp(): Promise<TestContext> {
   const db = createDb(config.DATABASE_URL);
   await resetDatabase(db);
   const mailer = new MemoryMailer();
-  const collab = createCollabServer({ config, db }, { debounce: 50, maxDebounce: 100, quiet: true });
+  const collab = createCollabServer({ config, db }, { debounce: 50, maxDebounce: 100, quiet: true, snapshotIntervalMs: 300, snapshotCheckMs: 100 });
   const app = await buildApp({ config, db, mailer, rateLimit: false, collab }, { logger: false });
   await app.ready();
   return {
@@ -38,6 +38,7 @@ export async function createTestApp(): Promise<TestContext> {
     appOrigin: config.APP_ORIGIN,
     collab,
     close: async () => {
+      collab.stopSnapshots();
       collab.closeConnections();
       await app.close();
       await db.end();

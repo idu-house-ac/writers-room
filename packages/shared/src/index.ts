@@ -182,3 +182,27 @@ export interface Notification {
   readAt: string | null;
   createdAt: string;
 }
+
+// ---- Version history (M4) ----
+
+export type SnapshotKind = 'auto' | 'named' | 'pre_restore';
+
+export interface SnapshotSummary {
+  id: string;
+  kind: SnapshotKind;
+  name: string | null;
+  pageCount: number;
+  authors: UserSummary[];
+  createdBy: UserSummary | null;
+  createdAt: string;
+}
+
+/** ProseMirror JSON of a script document, as stored in a snapshot. */
+export interface ScriptJson {
+  type: 'doc';
+  content?: { type: string; content?: { type: string; text?: string; marks?: { type: string }[] }[] }[];
+}
+
+export interface SnapshotDetail extends SnapshotSummary {
+  content: ScriptJson;
+}

@@ -24,6 +24,7 @@ import { CommentsPanel, type Draft } from '../comments/CommentsPanel';
 import { useComments } from '../comments/useComments';
 import { encodeAnchor } from '../comments/anchors';
 import { NotificationBell } from '../components/NotificationBell';
+import { HistoryPanel } from '../history/HistoryPanel';
 import { Sidebar } from './Sidebar';
 import { SmartType } from './smartType';
 import { Toolbar } from './Toolbar';
@@ -56,7 +57,17 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
   const [saveStatus, setSaveStatus] = useState(doc.status);
   const [following, setFollowing] = useState<number | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [commentsOpen, setCommentsOpen] = useState(Boolean(searchParams.get('thread')));
+  const [commentsOpen, setCommentsOpenState] = useState(Boolean(searchParams.get('thread')));
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+  const setCommentsOpen = (v: boolean | ((o: boolean) => boolean)) => {
+    setCommentsOpenState((o) => {
+      const next = typeof v === 'function' ? v(o) : v;
+      if (next) setHistoryOpen(false);
+      return next;
+    });
+  };
   const [draft, setDraft] = useState<Draft | null>(null);
   const canComment = can(project.myRole, 'comment');
 
@@ -83,6 +94,26 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
   void tick;
   if (import.meta.env.DEV) (window as unknown as { __wrEditor?: unknown }).__wrEditor = editor;
   const comments = useComments(project.id, editor, doc.provider);
+
+  // Restore notices from the collaboration server ("Amadin restored Draft 2").
+  useEffect(() => {
+    const onStateless = ({ payload }: { payload: string }) => {
+      try {
+        const msg = JSON.parse(payload) as { type?: string; by?: string; label?: string };
+        if (msg.type === 'restore') {
+          setToast(`${msg.by} restored ${msg.label}`);
+          setHistoryKey((k) => k + 1);
+          setTimeout(() => setToast(null), 8000);
+        }
+      } catch {
+        /* not ours */
+      }
+    };
+    doc.provider.on('stateless', onStateless);
+    return () => {
+      doc.provider.off('stateless', onStateless);
+    };
+  }, [doc.provider]);
 
   // Deep link from a notification: ?thread=<id> opens the panel on that thread.
   useEffect(() => {
@@ -215,7 +246,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
   const statusDot = saveStatus === 'synced' ? '' : saveStatus === 'denied' ? 'bad' : saveStatus === 'readonly' ? 'off' : saveStatus === 'offline' ? 'bad' : 'busy';
 
   return (
-    <div className={`editor-screen${focus ? ' focus-mode' : ''}${mode === 'draft' ? ' draft-mode' : ''}${commentsOpen ? ' with-comments' : ''}`}>
+    <div className={`editor-screen${focus ? ' focus-mode' : ''}${mode === 'draft' ? ' draft-mode' : ''}${commentsOpen || historyOpen ? ' with-comments' : ''}`}>
       <style>{profileCss(profile)}</style>
       <header className="project-head">
         <Wordmark />
@@ -261,6 +292,9 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
         </div>
         <button className="btn" aria-pressed={commentsOpen} onClick={() => setCommentsOpen((o) => !o)} title="Comments">
           Comments{comments.threads.filter((t) => t.status === 'open').length ? ` (${comments.threads.filter((t) => t.status === 'open').length})` : ''}
+        </button>
+        <button className="btn" aria-pressed={historyOpen} onClick={() => { setHistoryOpen((o) => !o); setCommentsOpenState(false); }} title="Version history">
+          History
         </button>
         <button className="btn" onClick={() => setSharing(true)}>
           Share
@@ -322,6 +356,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
             </button>
           )}
         </div>
+        {historyOpen && <HistoryPanel project={project} editor={editor} onClose={() => setHistoryOpen(false)} refreshKey={historyKey} />}
         {commentsOpen && (
           <CommentsPanel
             project={project}
@@ -359,6 +394,11 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
       </footer>
 
       {sharing && <ShareDialog project={project} onClose={() => setSharing(false)} onChange={onProjectChange} />}
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

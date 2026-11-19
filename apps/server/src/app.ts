@@ -12,9 +12,9 @@ import { setupAuth } from './plugins/auth';
 import { authRoutes } from './routes/auth';
 import { projectRoutes } from './routes/projects';
 import { commentRoutes } from './routes/comments';
-import { presenceOf, type CollabContext } from './collab';
+import { snapshotRoutes } from './routes/snapshots';
+import { presenceOf, type CollabServer } from './collab';
 import websocket from '@fastify/websocket';
-import type { Hocuspocus } from '@hocuspocus/server';
 import { requireUser } from './plugins/auth';
 
 export interface AppContext {
@@ -24,7 +24,7 @@ export interface AppContext {
   /** Rate limiting is on everywhere except in automated tests. */
   rateLimit: boolean;
   /** The collaboration server; mounted at /collab and used for presence lookups. */
-  collab?: Hocuspocus<CollabContext>;
+  collab?: CollabServer;
 }
 
 export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
@@ -93,6 +93,7 @@ export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {})
       await authRoutes(api, ctx);
       await projectRoutes(api, ctx);
       await commentRoutes(api, ctx);
+      await snapshotRoutes(api, ctx);
       api.get('/presence', async (request) => {
         const user = requireUser(request);
         if (!ctx.collab) return { presence: {} };

@@ -32,6 +32,7 @@ app.log.info('Collaboration WebSocket mounted at /collab');
 app.log.info(`Mail transport: ${config.mailTransport}${config.SMTP_HOST ? ` (${config.SMTP_HOST}:${config.SMTP_PORT})` : ''}`);
 
 const shutdown = async () => {
+  collab.stopSnapshots();
   collab.closeConnections();
   await app.close();
   await db.end();

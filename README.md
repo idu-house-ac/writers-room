@@ -2,7 +2,7 @@
 
 Private, self-hosted screenwriting for the Idu House team: live co-writing, comments, version history and an index-card board. The product brief is in [BRIEF.md](BRIEF.md); build notes are in [docs/decisions.md](docs/decisions.md).
 
-**Status: milestone M3 (comments).** Accounts, invitations, roles, dashboard and backups (M0); the screenplay editor with the feature format, smart typing, page view, navigator, find and replace, themes and autosave (M1); live co-writing with named carets, presence, follow mode and offline merge (M2); and now comments: select text and comment, threads with replies, @mentions of members, resolve and reopen, open/resolved/mine filters, highlights that follow the text through edits, in-app notifications for mentions, replies and invitations, and server-side enforcement of every role. Version history arrives in M4.
+**Status: milestone M4 (version history).** Accounts, invitations, roles, dashboard and backups (M0); the screenplay editor with the feature format, smart typing, page view, navigator, find and replace, themes and autosave (M1); live co-writing with named carets, presence, follow mode and offline merge (M2); and now comments: select text and comment, threads with replies, @mentions of members, resolve and reopen, open/resolved/mine filters, highlights that follow the text through edits, in-app notifications for mentions, replies and invitations, and server-side enforcement of every role (M3); and now version history: automatic copies every 10 minutes of editing and when the last person leaves, named drafts, preview, compare inline or side by side, and restore that keeps a "before restore" copy and reaches everyone connected. Index cards arrive in M5.
 
 ## Run it
 
@@ -71,6 +71,7 @@ Open a project and type. The editor follows the usual screenwriting flow:
 - **Tab** on an empty line cycles through all eight elements in that order; Shift+Tab cycles back.
 - Page view shows pages as they will print, with (MORE) and (CONT'D) on split dialogue. Draft view hides page breaks.
 - Select text and press **Comment** (or Ctrl/Cmd+Alt+M) to start a thread. Type `@` in a comment to mention a member; they get a notification under the bell. Comments stay attached to their words as the script changes. Commenters can comment but not edit; Readers can only read.
+- **History** lists every saved version. Name the current one as a draft, preview any version, compare two (or one against the script now), and restore. Restoring saves the current text first and updates everyone's screen; nothing is ever deleted.
 - Everyone in the project can type at the same time. Avatars in the header show who is here; click one to follow their cursor. If your connection drops, keep writing: the status bar says "Offline, changes saved locally" and your edits merge when it returns.
 
 ## Layout

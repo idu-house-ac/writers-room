@@ -64,7 +64,7 @@ export function CommentsPanel(props: {
     const filtered = withPos.filter(({ t }) => {
       if (filter === 'mine') return t.comments.some((c) => c.author.id === user?.id) || t.comments.some((c) => c.mentions.includes(user?.id ?? ''));
       if (filter === 'resolved') return t.status === 'resolved';
-      return t.status === 'open';
+      return t.status !== 'resolved'; // open and detached: never hidden, never deleted
     });
     return filtered.sort((a, b) => (a.r?.detached ? 1 : 0) - (b.r?.detached ? 1 : 0) || (a.r?.from ?? 0) - (b.r?.from ?? 0) || a.t.createdAt.localeCompare(b.t.createdAt));
   }, [threads, ranges, filter, user?.id]);

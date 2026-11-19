@@ -2,6 +2,20 @@
 
 Kept short, newest first. Each entry says what was chosen, why, and what was checked.
 
+## M4 (Nov 2026)
+
+**Snapshots are full copies.** Each row in `snapshots` holds the complete Yjs state (`crdt_snapshot`) and the ProseMirror JSON of the script (`content`), plus a content hash and page count. Yjs's built-in snapshot feature is not used: as the brief suspected, it needs garbage collection off, which would make the live document grow without bound (confirmed against the Yjs source: `createAbsolutePositionFromRelativePosition` returns null for garbage-collected structs, so GC stays on). Nothing is ever pruned.
+
+**Automatic snapshots** come from the collaboration server: `onChange` records who edited; a timer takes a snapshot of any document edited in the last 10 minutes (`snapshotIntervalMs`, 300 ms in tests); `onDisconnect` with no clients left takes one immediately. A snapshot whose content hash equals the latest one is skipped. Named drafts and "before restore" copies come from the API.
+
+**Restore applies a diff, not a replacement.** The restore route opens a Hocuspocus direct connection and, inside one transaction, aligns the current blocks with the snapshot's by longest common subsequence and deletes or inserts only the blocks that differ. Everyone connected receives it as an ordinary edit; the stored document is written straight after (not left to the store debounce). Unchanged blocks keep their Yjs items, so comments on them keep their anchors; comments whose anchors now point at deleted or garbage-collected items are set to `detached` and stay in the panel, never deleted. A "before restore" snapshot is taken first. The notice ("Amadin restored Draft 2") travels as a stateless broadcast and shows as a toast in every open editor.
+
+**Two gotchas found by tests.** Postgres `jsonb` reorders object keys, so block comparison uses a canonical key (type, text, sorted marks) instead of `JSON.stringify` of the stored JSON. Node's pooled `Buffer.from(base64)` returns a view with a non-zero byte offset, which the Yjs decoder cannot read; anchors are copied into a fresh `Uint8Array` first.
+
+**Compare** runs in the browser (`apps/web/src/history/diff.ts`): block-level LCS, then word-level LCS inside replaced blocks, rendered inline (one column) or side by side. Added text is underlined and green, removed text struck through and red, so colour is never the only signal.
+
+**Verified with two browsers:** restoring a draft dated an hour earlier showed the restored text and the notice in both; the pre-restore copy appeared in history; a comment on removed text showed as detached.
+
 ## M3 (Nov 2026)
 
 **Anchors.** A thread stores two Yjs relative positions (base64) made with `absolutePositionToRelativePosition` from the Tiptap binding, so they follow the characters through any edit by anyone. The client resolves them against the live document on every change. A range that resolves to nothing, or collapses to zero width, shows as "no longer in the script"; M4 will also set the stored status to `detached` on restore. Verified in two browsers: 20 lines inserted above a comment left the highlight on exactly the same words.

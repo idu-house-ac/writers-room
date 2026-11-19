@@ -11,6 +11,7 @@ import type { Config } from './config';
 import type { Db } from './db';
 import { loadDoc, writeDoc } from './docs';
 import { getRole } from './permissions';
+import { takeSnapshot } from './snapshots';
 
 export interface CollabContext {
   user: UserSummary;
@@ -31,11 +32,50 @@ export interface CollabOptions {
   debounce?: number;
   maxDebounce?: number;
   quiet?: boolean;
+  /** Automatic snapshot at least this often while a document is being edited (default 10 minutes). */
+  snapshotIntervalMs?: number;
+  /** How often to check for documents due a snapshot (default 1 minute). */
+  snapshotCheckMs?: number;
 }
 
-export function createCollabServer(deps: { config: Config; db: Db }, opts: CollabOptions = {}): Hocuspocus<CollabContext> {
+/** Editing activity per loaded document, for automatic snapshots. */
+export interface Activity {
+  authors: Set<string>;
+  dirtySince: number | null;
+  lastSnapshotAt: number;
+}
+
+export type CollabServer = Hocuspocus<CollabContext> & { stopSnapshots(): void; activity: Map<string, Activity> };
+
+export function createCollabServer(deps: { config: Config; db: Db }, opts: CollabOptions = {}): CollabServer {
   const signer = new Signer(deps.config.SESSION_SECRET);
   const profiles = new Map<string, FormatProfileId>();
+  const activity = new Map<string, Activity>();
+  const interval = opts.snapshotIntervalMs ?? 10 * 60 * 1000;
+
+  const activityOf = (name: string): Activity => {
+    let a = activity.get(name);
+    if (!a) {
+      a = { authors: new Set(), dirtySince: null, lastSnapshotAt: Date.now() };
+      activity.set(name, a);
+    }
+    return a;
+  };
+
+  const snapshotIfDue = async (name: string, document: Y.Doc, force: boolean) => {
+    const a = activityOf(name);
+    if (a.dirtySince === null) return;
+    if (!force && Date.now() - a.lastSnapshotAt < interval) return;
+    const authors = [...a.authors];
+    a.dirtySince = null;
+    a.authors.clear();
+    a.lastSnapshotAt = Date.now();
+    try {
+      await takeSnapshot(deps.db, name, document, { kind: 'auto', authors, profile: profiles.get(name) ?? 'feature', skipIfUnchanged: true });
+    } catch (err) {
+      console.error('automatic snapshot failed', err);
+    }
+  };
 
   const persistence: Extension<CollabContext> = {
     extensionName: 'postgres-docs',
@@ -48,9 +88,18 @@ export function createCollabServer(deps: { config: Config; db: Db }, opts: Colla
       const profile = profiles.get(documentName) ?? 'feature';
       await writeDoc(deps.db, documentName, document, profile, lastContext?.user?.id ?? null);
     },
+    async onChange({ documentName, context }) {
+      const a = activityOf(documentName);
+      a.dirtySince ??= Date.now();
+      if (context?.user?.id) a.authors.add(context.user.id);
+    },
+    async onDisconnect({ documentName, document, clientsCount }) {
+      // The last person left: keep a copy of what they ended with.
+      if (clientsCount === 0) await snapshotIfDue(documentName, document, true);
+    },
   };
 
-  return new Hocuspocus<CollabContext>({
+  const hocuspocus = new Hocuspocus<CollabContext>({
     quiet: opts.quiet ?? deps.config.NODE_ENV === 'test',
     debounce: opts.debounce ?? 2000,
     maxDebounce: opts.maxDebounce ?? 10000,
@@ -70,6 +119,18 @@ export function createCollabServer(deps: { config: Config; db: Db }, opts: Colla
       }
       const context: CollabContext = { user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatar_url, colour: user.colour }, role };
       return context;
+    },
+  });
+
+  const timer = setInterval(() => {
+    for (const [name, document] of hocuspocus.documents) void snapshotIfDue(name, document, false);
+  }, opts.snapshotCheckMs ?? 60 * 1000);
+  timer.unref?.();
+
+  return Object.assign(hocuspocus, {
+    activity,
+    stopSnapshots() {
+      clearInterval(timer);
     },
   });
 }

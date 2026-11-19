@@ -138,7 +138,9 @@ function convertEmpty(tr: Transaction, info: BlockInfo, target: ElementType): Tr
 /**
  * Tab:
  *  - empty line: cycle to the next element in Mod+1..8 order (Shift+Tab cycles back)
- *  - filled line: new block after it of the element's `tabTo` type; a filled character cue gets a parenthetical
+ *  - cursor at the start of a filled line: cycle that line's element (the text moves to the next format)
+ *  - cursor elsewhere in a filled line: new block after it of the element's `tabTo` type; a filled
+ *    character cue gets a parenthetical
  *  - a new parenthetical comes with its brackets, cursor between them
  */
 export function tabCommand(profile: FormatProfile): Command {
@@ -151,6 +153,8 @@ export function tabCommand(profile: FormatProfile): Command {
 
     if (isBlank(info)) {
       convertEmpty(tr, info, cycleElement(info.type, 1));
+    } else if (info.offset === 0 && state.selection.empty) {
+      convertInPlace(tr, $pos, cycleElement(info.type, 1));
     } else {
       const target: ElementType = info.type === 'character' ? 'parenthetical' : rule.tabTo;
       if (target === 'parenthetical') insertBlockAfter(tr, $pos, target, '()', 1);

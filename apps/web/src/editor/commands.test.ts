@@ -112,6 +112,24 @@ describe('Tab on an empty line cycles through every element', () => {
   });
 });
 
+describe('Tab at the start of a filled line changes its element', () => {
+  it('cycles the line through the formats, keeping the text', () => {
+    let s = stateAt([['action', 'Bob']], 0, 0);
+    const seen: [string, string][] = [];
+    for (let i = 0; i < 3; i++) {
+      s = run(s, tabCommand(P)).state;
+      seen.push([s.doc.firstChild!.type.name, s.doc.firstChild!.textContent]);
+    }
+    expect(seen).toEqual([['character', 'BOB'], ['parenthetical', 'BOB'], ['dialogue', 'BOB']]);
+    expect(s.doc.childCount).toBe(1);
+    expect(s.selection.$from.parentOffset).toBe(0);
+  });
+  it('Shift+Tab at the start cycles backwards', () => {
+    const r = run(stateAt([['character', 'BOB']], 0, 0), shiftTabCommand(P));
+    expect(r.blocks).toEqual([['action', 'BOB']]);
+  });
+});
+
 describe('Tab after a filled block adds the next element', () => {
   for (const type of ELEMENT_TYPES) {
     const target = type === 'character' ? 'parenthetical' : P.elements[type].tabTo;

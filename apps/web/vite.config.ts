@@ -12,7 +12,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ['yjs', '@tiptap/y-tiptap', '@tiptap/extension-collaboration', '@tiptap/extension-collaboration-caret', '@hocuspocus/provider', 'y-indexeddb', '@tiptap/pm/state', '@tiptap/pm/view', '@tiptap/pm/model'],
   },
-  resolve: { dedupe: ['yjs', '@tiptap/y-tiptap', '@tiptap/pm', 'prosemirror-state', 'prosemirror-view', 'prosemirror-model'] },
+  resolve: { dedupe: ['yjs', '@tiptap/y-tiptap', '@tiptap/pm'] },
   server: {
     proxy: {
       '/api': { target: apiTarget, changeOrigin: false },

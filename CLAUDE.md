@@ -28,3 +28,4 @@ Read `BRIEF.md` first. It is the product spec. Mockup screenshots, when present,
 - `docker compose up` — run everything (web on :5173, API and collaboration WebSocket on :3000, Mailpit on :8025).
 - `pnpm install` then `pnpm dev` — run web and server locally against a Postgres you provide.
 - `pnpm test` — all tests. `pnpm typecheck` — TypeScript across the workspace.
+- `pnpm --filter @writers-room/web build` — the production web build. Run it before every commit: the server's Docker image runs it, and a broken build leaves the old version deployed.

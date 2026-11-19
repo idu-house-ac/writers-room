@@ -144,6 +144,7 @@ When you see `Server listening`, open `https://writers.iduhouse.com`. Caddy fetc
   ```bash
   cd ~/writers-room && git pull && docker compose -f docker-compose.prod.yml up -d --build
   ```
+  Watch the end of the output: if the build fails, Docker keeps the previous version running and the last lines say so in red. The GitHub Actions check on the repository (the tick or cross next to the latest commit) shows whether a version builds before you pull it.
 - **System updates** once a month: `apt update && apt -y upgrade`, then `reboot` if it says a restart is needed. Everything comes back on its own.
 - **Backups**: Hetzner's daily server backups cover the whole machine. The app also writes a nightly database dump to `~/writers-room/backups/`. Once a month, run the restore drill in `docs/runbooks/backups.md`, and copy a recent dump to your Mac:
   ```bash

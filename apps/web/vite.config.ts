@@ -7,6 +7,12 @@ const apiTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000';
 
 export default defineConfig({
   plugins: [react()],
+  // Yjs and its ProseMirror binding must exist exactly once in the page: plugin keys and class
+  // identity break if the dev optimizer bundles a second copy inside another dependency.
+  optimizeDeps: {
+    include: ['yjs', '@tiptap/y-tiptap', '@tiptap/extension-collaboration', '@tiptap/extension-collaboration-caret', '@hocuspocus/provider', 'y-indexeddb', '@tiptap/pm/state', '@tiptap/pm/view', '@tiptap/pm/model'],
+  },
+  resolve: { dedupe: ['yjs', '@tiptap/y-tiptap', '@tiptap/pm', 'prosemirror-state', 'prosemirror-view', 'prosemirror-model'] },
   server: {
     proxy: {
       '/api': { target: apiTarget, changeOrigin: false },

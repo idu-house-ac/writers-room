@@ -1,7 +1,8 @@
 // Where each collaborator's cursor is, as document positions, from the awareness states.
 import type { Editor } from '@tiptap/core';
 import * as Y from 'yjs';
-import { relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-tiptap';
+import { relativePositionToAbsolutePosition } from '@tiptap/y-tiptap';
+import { ySyncState } from './ysync';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 
 export interface Collaborator {
@@ -14,7 +15,7 @@ export interface Collaborator {
 }
 
 export function collaborators(editor: Editor, provider: HocuspocusProvider, selfClientId: number): Collaborator[] {
-  const ystate = ySyncPluginKey.getState(editor.state);
+  const ystate = ySyncState(editor.state);
   const out: Collaborator[] = [];
   const awareness = provider.awareness;
   if (!awareness) return out;

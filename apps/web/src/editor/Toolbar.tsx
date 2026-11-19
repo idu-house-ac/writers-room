@@ -18,6 +18,8 @@ export function Toolbar(props: {
   onFocus: () => void;
   theme: 'dark' | 'light';
   onTheme: () => void;
+  canComment: boolean;
+  onComment: () => void;
 }) {
   const { editor, profile, canEdit } = props;
   const block = editor ? currentBlock(editor.state) : null;
@@ -79,6 +81,9 @@ export function Toolbar(props: {
         +
       </button>
       <div className="grow" />
+      <button className="btn btn-ghost btn-sm" disabled={!props.canComment || !editor || editor.state.selection.empty} onClick={props.onComment} title={`Comment on the selection (${MOD}+Alt+M)`}>
+        Comment
+      </button>
       <button className="btn btn-ghost btn-sm" onClick={props.onFind} title={`Find and replace (${MOD}+F)`}>
         Find
       </button>

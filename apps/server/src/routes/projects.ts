@@ -18,6 +18,7 @@ import type { Queryable } from '../db';
 import { badRequest, conflict, notFound, parseBody } from '../errors';
 import { inviteEmail } from '../mail';
 import { loadDoc, mergeDoc } from '../docs';
+import { notify } from './comments';
 import { requireUser } from '../plugins/auth';
 import { requireAction } from '../permissions';
 import { findUserByEmail, normaliseEmail } from '../users';
@@ -318,6 +319,9 @@ export async function projectRoutes(app: FastifyInstance, ctx: AppContext) {
       reply.code(201);
     }
     const link = await sendInvite(ctx, { id: inviteId, email: body.email, role: body.role }, project.title, user.name);
+    if (existingUser) {
+      await notify(ctx.db, [existingUser.id], 'invite', { projectId: project.id, projectTitle: project.title, actor: { id: user.id, name: user.name } });
+    }
     return { invites: await loadPendingInvites(ctx.db, project.id), link };
   });
 

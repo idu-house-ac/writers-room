@@ -3,6 +3,7 @@ import { useAuth } from '../auth';
 import { Avatar } from './Avatar';
 import { Menu } from './Menu';
 import { Wordmark } from './Wordmark';
+import { NotificationBell } from './NotificationBell';
 
 export function TopBar({ search, onSearch }: { search?: string; onSearch?: (v: string) => void }) {
   const { user, signOut } = useAuth();
@@ -23,6 +24,7 @@ export function TopBar({ search, onSearch }: { search?: string; onSearch?: (v: s
       <div className="grow" />
       {user && (
         <div className="row">
+          <NotificationBell />
           <Avatar user={user} />
           <span className="small truncate" style={{ maxWidth: 160 }}>
             {user.name}

@@ -2,6 +2,20 @@
 
 Kept short, newest first. Each entry says what was chosen, why, and what was checked.
 
+## M3 (Nov 2026)
+
+**Anchors.** A thread stores two Yjs relative positions (base64) made with `absolutePositionToRelativePosition` from the Tiptap binding, so they follow the characters through any edit by anyone. The client resolves them against the live document on every change. A range that resolves to nothing, or collapses to zero width, shows as "no longer in the script"; M4 will also set the stored status to `detached` on restore. Verified in two browsers: 20 lines inserted above a comment left the highlight on exactly the same words.
+
+**Plugin ordering gotcha.** ProseMirror builds plugin states in plugin order, and the comment-highlight plugin runs before the Yjs sync plugin, so during a transaction the sync state is not on the new state yet. Highlights are therefore mapped through each transaction (`DecorationSet.map`) and re-resolved from the anchors 50 ms after the document settles, with the sync state read from the previous state when the new one lacks it. The same ordering is why the sync plugin is looked up by its registered name (`editor/ysync.ts`) rather than by key object.
+
+**Vite dedupe.** In development Vite had optimised two copies of `@tiptap/y-tiptap`, so plugin keys and class checks did not match between app code and the collaboration extension. `optimizeDeps.include` and `resolve.dedupe` in `vite.config.ts` pin Yjs, the binding and ProseMirror to one copy. Production builds were never affected.
+
+**Live updates.** Comment changes are broadcast to everyone on the document through Hocuspocus stateless messages (`document.broadcastStateless`) from the API route, with a 30 s poll as fallback. Notifications poll every 20 s.
+
+**Mentions.** Bodies are plain text containing `@Name`; the `mentions` column holds the member ids chosen from the picker. The server drops ids that are not project members. Mentioned members get a `mention` notification; other participants of the thread get `reply`; a member invited to a project gets `invite`. Email notifications are a later phase as the brief says.
+
+**Permissions.** `test/comments.test.ts` runs the whole permissions table against the API, and connects a Commenter to the collaboration server to confirm their edits are dropped (read-only connection) and never stored. Readers get 403 on comments. Authors edit and delete their own comments; Owners may delete anyone's; a thread with no comments left is removed.
+
 ## Deployment prep (Nov 2026, after M2)
 
 **One process, one port.** The collaboration WebSocket now mounts on the API's own port at `/collab` through `@fastify/websocket` (MIT), instead of a second port. Hocuspocus 4's `handleConnection` expects a Fetch-style `Request` and does not attach socket listeners itself (its bundled `Server` uses `crossws` for that), so `app.ts` rebuilds a `Request` from the upgrade headers (cookie included, hop-by-hop headers dropped) and forwards `message`, `close` and `pong` events to the connection. This matters for hosts that expose a single port (Railway, Render, Fly.io) and simplifies Caddy.

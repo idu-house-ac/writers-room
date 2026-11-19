@@ -11,6 +11,7 @@ import type { Mailer } from './mail';
 import { setupAuth } from './plugins/auth';
 import { authRoutes } from './routes/auth';
 import { projectRoutes } from './routes/projects';
+import { commentRoutes } from './routes/comments';
 import { presenceOf, type CollabContext } from './collab';
 import websocket from '@fastify/websocket';
 import type { Hocuspocus } from '@hocuspocus/server';
@@ -91,6 +92,7 @@ export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {})
     async (api) => {
       await authRoutes(api, ctx);
       await projectRoutes(api, ctx);
+      await commentRoutes(api, ctx);
       api.get('/presence', async (request) => {
         const user = requireUser(request);
         if (!ctx.collab) return { presence: {} };

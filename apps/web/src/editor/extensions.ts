@@ -3,6 +3,7 @@ import type { FormatProfile } from '@writers-room/shared';
 import { autocompletePlugin } from './autocomplete';
 import { paginationPlugin, type ViewMode } from './pagination';
 import { searchPlugin } from './search';
+import { commentMarksPlugin } from '../comments/commentMarks';
 
 /** Page view, autocomplete and find/replace as ProseMirror plugins. Priority keeps autocomplete's keys ahead of the keymap. */
 export const EditorPlugins = Extension.create<{ profile: FormatProfile; mode: ViewMode }>({
@@ -12,6 +13,6 @@ export const EditorPlugins = Extension.create<{ profile: FormatProfile; mode: Vi
     return { profile: undefined as unknown as FormatProfile, mode: 'page' };
   },
   addProseMirrorPlugins() {
-    return [autocompletePlugin(this.options.profile), paginationPlugin(this.options.profile, this.options.mode), searchPlugin()];
+    return [autocompletePlugin(this.options.profile), paginationPlugin(this.options.profile, this.options.mode), searchPlugin(), commentMarksPlugin()];
   },
 });

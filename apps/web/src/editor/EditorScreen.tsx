@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { can, FORMAT_LABELS, getProfile, ROLE_LABELS, type ProjectDetail } from '@writers-room/shared';
 import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
@@ -20,6 +20,10 @@ import { ScreenplayKit } from './ScreenplayKit';
 import { SCRIPT_FIELD, type CollabDoc, type SyncStatus } from './collab';
 import { collaborators } from './presence';
 import { PresenceBar } from './PresenceBar';
+import { CommentsPanel, type Draft } from '../comments/CommentsPanel';
+import { useComments } from '../comments/useComments';
+import { encodeAnchor } from '../comments/anchors';
+import { NotificationBell } from '../components/NotificationBell';
 import { Sidebar } from './Sidebar';
 import { SmartType } from './smartType';
 import { Toolbar } from './Toolbar';
@@ -51,6 +55,10 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState(doc.status);
   const [following, setFollowing] = useState<number | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [commentsOpen, setCommentsOpen] = useState(Boolean(searchParams.get('thread')));
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const canComment = can(project.myRole, 'comment');
 
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => doc.subscribe(() => setSaveStatus(doc.status)), [doc]);
@@ -73,6 +81,59 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
   );
   const tick = useEditorTick(editor);
   void tick;
+  if (import.meta.env.DEV) (window as unknown as { __wrEditor?: unknown }).__wrEditor = editor;
+  const comments = useComments(project.id, editor, doc.provider);
+
+  // Deep link from a notification: ?thread=<id> opens the panel on that thread.
+  useEffect(() => {
+    const id = searchParams.get('thread');
+    if (id && comments.threads.some((t) => t.id === id)) {
+      setCommentsOpen(true);
+      comments.setActiveId(id);
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comments.threads]);
+
+  // Clicking a highlight in the script opens its thread.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      setCommentsOpen(true);
+      comments.setActiveId((e as CustomEvent<string>).detail);
+    };
+    window.addEventListener('wr:open-thread', onOpen);
+    return () => window.removeEventListener('wr:open-thread', onOpen);
+  }, [comments]);
+
+  const startComment = useCallback(() => {
+    if (!editor || !canComment) return;
+    const { from, to, empty } = editor.state.selection;
+    if (empty) return;
+    const anchorStart = encodeAnchor(editor.state, from);
+    const anchorEnd = encodeAnchor(editor.state, to);
+    if (!anchorStart || !anchorEnd) return;
+    setDraft({ anchorStart, anchorEnd, quotedText: editor.state.doc.textBetween(from, to, ' ').slice(0, 500) });
+    setCommentsOpen(true);
+  }, [editor, canComment]);
+
+  // Floating "Comment" button near a non-empty selection.
+  const selectionFab = (() => {
+    if (!editor || !canComment || draft) return null;
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return null;
+    const { from, to, empty } = editor.state.selection;
+    if (empty) return null;
+    try {
+      const a = editor.view.coordsAtPos(from);
+      const b = editor.view.coordsAtPos(to);
+      const scroller = document.querySelector('.paper-scroll');
+      const rect = scroller?.getBoundingClientRect();
+      if (!rect) return null;
+      return { left: (a.left + b.left) / 2 - rect.left + (scroller?.scrollLeft ?? 0), top: Math.min(a.top, b.top) - rect.top + (scroller?.scrollTop ?? 0) };
+    } catch {
+      return null;
+    }
+  })();
 
   const setMode = useCallback(
     (m: ViewMode) => {
@@ -88,6 +149,10 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
         e.preventDefault();
         setFindOpen(true);
       }
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        startComment();
+      }
       if (e.key === 'Escape') {
         if (findOpen) setFindOpen(false);
         else if (focus) setFocus(false);
@@ -95,7 +160,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [findOpen, focus]);
+  }, [findOpen, focus, startComment]);
 
   const people = editor ? collaborators(editor, doc.provider, doc.ydoc.clientID) : [];
 
@@ -150,7 +215,7 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
   const statusDot = saveStatus === 'synced' ? '' : saveStatus === 'denied' ? 'bad' : saveStatus === 'readonly' ? 'off' : saveStatus === 'offline' ? 'bad' : 'busy';
 
   return (
-    <div className={`editor-screen${focus ? ' focus-mode' : ''}${mode === 'draft' ? ' draft-mode' : ''}`}>
+    <div className={`editor-screen${focus ? ' focus-mode' : ''}${mode === 'draft' ? ' draft-mode' : ''}${commentsOpen ? ' with-comments' : ''}`}>
       <style>{profileCss(profile)}</style>
       <header className="project-head">
         <Wordmark />
@@ -194,9 +259,13 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
             <Avatar key={m.id} user={m} title={`${m.name} · ${ROLE_LABELS[m.role]}`} />
           ))}
         </div>
+        <button className="btn" aria-pressed={commentsOpen} onClick={() => setCommentsOpen((o) => !o)} title="Comments">
+          Comments{comments.threads.filter((t) => t.status === 'open').length ? ` (${comments.threads.filter((t) => t.status === 'open').length})` : ''}
+        </button>
         <button className="btn" onClick={() => setSharing(true)}>
           Share
         </button>
+        <NotificationBell />
         {user && (
           <Menu label="Account menu">
             {(close) => (
@@ -235,17 +304,40 @@ export function EditorScreen({ project, doc, onProjectChange }: { project: Proje
           onFocus={() => setFocus(true)}
           theme={theme}
           onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          canComment={canComment}
+          onComment={startComment}
         />
         {findOpen && <FindBar editor={editor} canEdit={canEdit} onClose={() => setFindOpen(false)} />}
       </div>
 
       <div className="editor-body">
         <Sidebar editor={editor} canEdit={canEdit} people={people} />
-        <div className="paper-scroll" onClick={(e) => e.target === e.currentTarget && editor?.commands.focus()}>
+        <div className="paper-scroll" style={{ position: 'relative' }} onClick={(e) => e.target === e.currentTarget && editor?.commands.focus()}>
           <div className="paper-wrap" style={{ ['--zoom' as string]: zoom }}>
             <EditorContent editor={editor} />
           </div>
+          {selectionFab && (
+            <button className="btn btn-primary btn-sm comment-fab" style={{ left: selectionFab.left, top: selectionFab.top }} onMouseDown={(e) => e.preventDefault()} onClick={startComment}>
+              Comment
+            </button>
+          )}
         </div>
+        {commentsOpen && (
+          <CommentsPanel
+            project={project}
+            editor={editor}
+            threads={comments.threads}
+            activeId={comments.activeId}
+            onActive={comments.setActiveId}
+            onApply={comments.apply}
+            draft={draft}
+            onDraftDone={() => setDraft(null)}
+            onClose={() => {
+              setCommentsOpen(false);
+              setDraft(null);
+            }}
+          />
+        )}
       </div>
 
       <footer className="statusbar">

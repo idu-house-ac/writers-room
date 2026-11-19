@@ -135,3 +135,50 @@ export * from './format/profiles';
 export * from './format/wrap';
 export * from './format/pagination';
 export * from './format/script';
+
+// ---- Comments and notifications (M3) ----
+
+export type ThreadStatus = 'open' | 'resolved' | 'detached';
+
+export interface Comment {
+  id: string;
+  threadId: string;
+  author: UserSummary;
+  body: string;
+  mentions: string[]; // user ids
+  createdAt: string;
+  editedAt: string | null;
+}
+
+export interface CommentThread {
+  id: string;
+  projectId: string;
+  /** Yjs relative positions, base64. The client resolves them against the live document. */
+  anchorStart: string;
+  anchorEnd: string;
+  quotedText: string;
+  status: ThreadStatus;
+  createdBy: UserSummary;
+  createdAt: string;
+  resolvedBy: UserSummary | null;
+  resolvedAt: string | null;
+  comments: Comment[];
+}
+
+export type NotificationType = 'mention' | 'reply' | 'invite';
+
+export interface NotificationPayload {
+  projectId: string;
+  projectTitle: string;
+  threadId?: string;
+  actor: { id: string; name: string };
+  excerpt?: string;
+}
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  payload: NotificationPayload;
+  readAt: string | null;
+  createdAt: string;
+}
